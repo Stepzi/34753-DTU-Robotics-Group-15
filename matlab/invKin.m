@@ -26,14 +26,18 @@ w = [w_x;w_y;w_z];
 r = sqrt(w_x^2 +w_y^2);
 
 s = w_z-p.d1;
-cos3 = (r^2+s^2-p.a2^2-p.a3^2)/2*p.a2*p.a3;
+cos3 = (r^2+s^2-p.a2^2-p.a3^2)/(2*p.a2*p.a3);
 if(elbow == "ElbowUp")
     q3 = atan2(-sqrt(1-cos3^2),cos3);
+    q2 = atan2(-r,s)+atan2(sqrt(1-cos3^2)*p.a3,p.a2+p.a3*cos3);
 else
-    q3 = atan2(sqrt(1-cos3^2),cos3);
+    q3 = atan2(+sqrt(1-cos3^2),cos3);
+    q2 = atan2(-r,s)-atan2(sqrt(1-cos3^2)*p.a3,p.a2+p.a3*cos3);
 end
 
-q2 = atan2(-r,s)-atan2(sqrt(1-cos3^2)*p.a3,p.a2+p.a3*cos3);
+% q2 = atan2(-r,s)+atan2(sqrt(1-cos3^2)*p.a3,p.a2+p.a3*cos3);
+% q2 = atan2(s,r)-atan2(sqrt(1-cos3^2)*p.a3,p.a2+p.a3*cos3);
+
 
 q4 = a-pi/2-q2-q3;
 
