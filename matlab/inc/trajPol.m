@@ -5,8 +5,8 @@ function A = trajPol(condA,condB,tA,tB)
 %   2 -> 3rd order, 3 -> 5th order
 %   returns A, a vector with coefficients in increasing order
 
-cond(1:3,1) = condA;
-cond(4:6,1) = condB;
+cond(1:length(condA),1) = condA;
+cond(length(condA)+1:2*length(condA),1) = condB;
 switch length(cond)
     case 2
         T = [1 tA           
