@@ -1,5 +1,5 @@
 import sys, os
-import os
+import numpy as np
 
 # Add the Dynamixel SDK path to sys.path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), 'DynamixelSDK/python/src')))
@@ -18,7 +18,7 @@ ADDR_MX_PRESENT_POSITION = 36
 ADDR_MX_PUNCH = 48
 PROTOCOL_VERSION = 1.0
 DXL_IDS = [1,2,3,4]
-DEVICENAME = 'COM1'
+DEVICENAME = 'COM6'
 BAUDRATE = 1000000
 TORQUE_ENABLE = 1
 TORQUE_DISABLE = 0
@@ -44,6 +44,7 @@ if os.path.exists(f"//./{DEVICENAME}"):
             packetHandler.write1ByteTxRx(portHandler, DXL_ID, ADDR_MX_CW_COMPLIANCE_SLOPE, 32)
             packetHandler.write1ByteTxRx(portHandler, DXL_ID, ADDR_MX_CCW_COMPLIANCE_SLOPE, 32)
             packetHandler.write2ByteTxRx(portHandler, DXL_ID, ADDR_MX_MOVING_SPEED, 100)
+            packetHandler.write2ByteTxRx(portHandler, DXL_ID, ADDR_MX_GOAL_POSITION, 512)
     else:
         print(f"Failed to open port {DEVICENAME}")
 else:
