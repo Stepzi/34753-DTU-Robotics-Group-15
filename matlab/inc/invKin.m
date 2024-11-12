@@ -18,7 +18,7 @@ q1 = atan2(oy,ox);
 a = atan2(x_4z,sqrt(1-x_4z^2));
 
 w_x = ox-p.a4*cos(a)*cos(q1);
-w_y = oy-p.a4*sin(q1);
+w_y = oy-p.a4*cos(a)*sin(q1);
 w_z = oz-p.a4*sin(a);
 w = [w_x;w_y;w_z];
 
