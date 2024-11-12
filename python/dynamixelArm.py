@@ -18,10 +18,12 @@ ADDR_MX_PRESENT_POSITION = 36
 ADDR_MX_PUNCH = 48
 PROTOCOL_VERSION = 1.0
 DXL_IDS = [1,2,3,4]
-DEVICENAME = 'COM6'
+DEVICENAME = 'COM5'
 BAUDRATE = 1000000
 TORQUE_ENABLE = 1
 TORQUE_DISABLE = 0
+
+
 
 # Check if the specified COM port exists before attempting to open it
 if os.path.exists(f"//./{DEVICENAME}"):
@@ -49,3 +51,4 @@ if os.path.exists(f"//./{DEVICENAME}"):
         print(f"Failed to open port {DEVICENAME}")
 else:
     print(f"Port {DEVICENAME} does not exist. Please connect a device.")
+
