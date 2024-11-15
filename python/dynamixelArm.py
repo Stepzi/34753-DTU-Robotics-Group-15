@@ -114,21 +114,14 @@ class RobotArm():
             self.motor_speed = speeds
 
         for motor_id, speed in zip(self.DXL_IDS, speeds):
-            if speeds(i) > 0 && speeds(i) <= 1
-                speed = speeds(i)*1023
-                self.packetHandler.write2ByteTxRx(self.port_num, self.PROTOCOL_VERSION, self.motor_ids(i), 32, speed)
-                dxl_comm_result = getLastTxRxResult(self.port_num, self.PROTOCOL_VERSION)
-                dxl_error = self.packetHandler.getLastRxPacketError(self.port_num, self.PROTOCOL_VERSION)
-                if dxl_comm_result ~= self.COMM_SUCCESS
-                    print('\n#s', self.packetHandler.getTxRxResult(self.PROTOCOL_VERSION, dxl_comm_result))
-                elseif dxl_error ~= 0
-                    print('\n#s', self.packetHandler.getRxPacketError(self.PROTOCOL_VERSION, dxl_error))
-                end
-            else
+            if (speed > 0 and speed <= 1):
+                result, error = self.packetHandler.write2ByteTxRx(self.portHandler,motor_id, self.ADDR_MX_MOVING_SPEED, int(speed*1023))
+                if result != dxl.COMM_SUCCESS:
+                    print(f"Failed to set speed for motor {motor_id}: {self.packetHandler.getTxRxResult(result)}")
+            else:
                 print("\nMovement speed out of range, enter value between ]0,1]") 
-            end
-        end
-    end
+            
+    
 
     def close(self):
         # Disable torque and close port before exiting
@@ -148,10 +141,13 @@ if __name__ == "__main__":
         # enable torque on all motors
         for motor_id in arm.DXL_IDS:
             arm.enable_torque(motor_id)
+
+        # Define speed for each motor
+        arm.set_speed([0.01, 0.01, 0.01, 0.01],True)
             
 
         # Define goal positions for each motor
-        goal_positions = [512, 512, 512, 512] 
+        goal_positions = [220, 512, 512, 512] 
         arm.move_to_positions(goal_positions)
         
     finally:
