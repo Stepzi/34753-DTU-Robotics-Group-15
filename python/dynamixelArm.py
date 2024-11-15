@@ -2,7 +2,7 @@ import sys, os
 import numpy as np
 
 # Add the Dynamixel SDK path to sys.path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), 'DynamixelSDK/python/src')))
+# sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), 'DynamixelSDK/python/src')))
 
 import dynamixel_sdk as dxl
 
@@ -21,7 +21,10 @@ class RobotArm():
         self.TORQUE_ENABLE = 1
         self.TORQUE_DISABLE = 0
         self.DXL_MOVING_STATUS_THRESHOLD = 10  # Threshold for detecting movement completion
-        self.DXL_IDS = [1, 2, 3, 4]  # Motor IDs
+        # self.DXL_IDS = [1, 2, 3, 4]  # Motor IDs
+        self.DXL_IDS = [2, 3, 4]
+
+        self.motor_speed = 0 
 
 
         # initialize portHandler and packetHandler
@@ -96,6 +99,37 @@ class RobotArm():
                 if abs(goal_pos - current_position) < self.DXL_MOVING_STATUS_THRESHOLD:
                     break  # Movement complete for this motor
 
+    def set_speed(self, speeds, overwrite_speeds):
+        #set_speed function for the MyRobot Class.
+        #   Sets individual motor speeds between 0# and 100#
+        #
+        #Inputs:
+        #   speeds : a vector representing motor speeds for each motor
+        #   ID between 0 and 1
+        #   overwrite_speeds: boolean, if true class internal motor
+        #   speeds are overwritten to motor speeds of function call
+        #Outputs:
+        #   None
+        if overwrite_speeds:
+            self.motor_speed = speeds
+
+        for motor_id, speed in zip(self.DXL_IDS, speeds):
+            if speeds(i) > 0 && speeds(i) <= 1
+                speed = speeds(i)*1023
+                self.packetHandler.write2ByteTxRx(self.port_num, self.PROTOCOL_VERSION, self.motor_ids(i), 32, speed)
+                dxl_comm_result = getLastTxRxResult(self.port_num, self.PROTOCOL_VERSION)
+                dxl_error = self.packetHandler.getLastRxPacketError(self.port_num, self.PROTOCOL_VERSION)
+                if dxl_comm_result ~= self.COMM_SUCCESS
+                    print('\n#s', self.packetHandler.getTxRxResult(self.PROTOCOL_VERSION, dxl_comm_result))
+                elseif dxl_error ~= 0
+                    print('\n#s', self.packetHandler.getRxPacketError(self.PROTOCOL_VERSION, dxl_error))
+                end
+            else
+                print("\nMovement speed out of range, enter value between ]0,1]") 
+            end
+        end
+    end
+
     def close(self):
         # Disable torque and close port before exiting
         for motor_id in self.DXL_IDS:
@@ -107,7 +141,7 @@ class RobotArm():
 # basic usage demo:
 
 if __name__ == "__main__":
-    arm = RobotArm(device_name='COM5', baudrate=1000000)
+    arm = RobotArm(device_name='/dev/ttyACM0', baudrate=1000000)
 
     try:
         #self.packetHandler.write2ByteTxRx(self.portHandler, self.DXL_ID, self.ADDR_MX_MOVING_SPEED, 100)
@@ -117,7 +151,7 @@ if __name__ == "__main__":
             
 
         # Define goal positions for each motor
-        goal_positions = [0, 0, 0, 0] 
+        goal_positions = [512, 512, 512, 512] 
         arm.move_to_positions(goal_positions)
         
     finally:
