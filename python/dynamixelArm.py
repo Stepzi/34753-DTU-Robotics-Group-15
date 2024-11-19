@@ -8,7 +8,7 @@ import dynamixel_sdk as dxl
 
 class RobotArm():
     def __init__(self, device_name='COM5', baudrate=1000000, protocol_version=1.0):
-        # initialize constants and configurations
+        # Initialize constants and configurations
         self.ADDR_MX_TORQUE_ENABLE = 24
         self.ADDR_MX_CW_COMPLIANCE_MARGIN = 26
         self.ADDR_MX_CCW_COMPLIANCE_MARGIN = 27
@@ -23,28 +23,22 @@ class RobotArm():
         self.DXL_MOVING_STATUS_THRESHOLD = 10  # Threshold for detecting movement completion
         self.DXL_IDS = [1, 2, 3, 4]  # Motor IDs
 
-
-        # initialize portHandler and packetHandler
+        # Initialize portHandler and packetHandler
         self.portHandler = dxl.PortHandler(device_name)
         self.packetHandler = dxl.PacketHandler(protocol_version)
 
-        # open port and set baudrate
+        # Open port and set baudrate
         if self.portHandler.openPort() and self.portHandler.setBaudRate(baudrate):
             print(f"Successfully opened port {device_name} and set baudrate")
         else:
             print(f"Failed to open port {device_name} and set baudrate")
             sys.exit(1)
 
-
-    # Create "functions" for setting and moving motors:
-
     def enable_torque(self, motor_id):
-        # enable torque for a motor
+        # Enable torque for a motor
         result, error = self.packetHandler.write1ByteTxRx(self.portHandler, motor_id, self.ADDR_MX_TORQUE_ENABLE, self.TORQUE_ENABLE)
         if result != dxl.COMM_SUCCESS:
             print(f"Failed to enable torque for motor {motor_id}: {self.packetHandler.getTxRxResult(result)}")
-
-
 
     def disable_torque(self, motor_id):
         # Disable torque for a specific motor
@@ -52,15 +46,28 @@ class RobotArm():
         if result != dxl.COMM_SUCCESS:
             print(f"Failed to disable torque for motor {motor_id}: {self.packetHandler.getTxRxResult(result)}")
 
-    def deg_to_rot(self,deg):
-            #deg_to_rot function for the MyRobot Class.
-            #   Converts degree to units per rotation of motors
-            #
-            #Inputs:
-            #   deg : value [deg]
-            #Outputs:
-            #   rot : value in units per rotation of motor
-            return deg*1/0.29
+    def deg_to_rot(self, deg):
+        # Convert degrees to Dynamixel position units
+        return int(deg * 1023 / 300)  # Assuming a 300° range of motion
+
+    def set_speed(self, motor_id, speed):
+        """
+        Set the speed for a specific motor.
+        :param motor_id: Motor ID to set the speed for.
+        :param speed: Speed value between 0 and 1 (fraction of maximum speed).
+        """
+        if not (0 < speed <= 1):
+            print(f"Invalid speed value for motor {motor_id}. Speed must be between 0 and 1.")
+            return
+        
+        speed_value = int(speed * 1023)  # Scale speed to Dynamixel units (0–1023)
+        result, error = self.packetHandler.write2ByteTxRx(self.portHandler, motor_id, self.ADDR_MX_MOVING_SPEED, speed_value)
+        if result != dxl.COMM_SUCCESS:
+            print(f"Failed to set speed for motor {motor_id}: {self.packetHandler.getTxRxResult(result)}")
+        elif error != 0:
+            print(f"Packet error while setting speed for motor {motor_id}: {self.packetHandler.getRxPacketError(error)}")
+        else:
+            print(f"Speed for motor {motor_id} set to {speed_value} (scaled from {speed * 100}%)")
 
     def set_goal_position(self, motor_id, position):
         # Set the target position for a motor
@@ -71,21 +78,19 @@ class RobotArm():
     def get_present_position(self, motor_id):
         # Attempt to read the present position for the specified motor
         position, result, error = self.packetHandler.read2ByteTxRx(self.portHandler, motor_id, self.ADDR_MX_PRESENT_POSITION)
-    
         if result != dxl.COMM_SUCCESS:
             print(f"Failed to read position for motor {motor_id}: {self.packetHandler.getTxRxResult(result)}")
             return None
-        elif error != 0:
-            print(f"Error occurred while reading position for motor {motor_id}: {self.packetHandler.getRxPacketError(error)}")
-            return None
-
-        # Position read successfully
         return position
 
-    def move_to_positions(self, goal_positions):
+    def move_to_positions(self, goal_positions, speeds=None):
         # Move each motor to the target position specified in goal_positions
-        for motor_id, goal_pos in zip(self.DXL_IDS, goal_positions):
-            self.set_goal_position(motor_id, goal_pos)
+        if speeds is None:
+            speeds = [1.0] * len(self.DXL_IDS)  # Default to maximum speed
+
+        for motor_id, goal_pos, speed in zip(self.DXL_IDS, goal_positions, speeds):
+            self.set_speed(motor_id, speed)  # Set speed for each motor
+            self.set_goal_position(motor_id, goal_pos)  # Set goal position
 
         # Wait until all motors reach their goal positions
         for motor_id, goal_pos in zip(self.DXL_IDS, goal_positions):
@@ -103,50 +108,22 @@ class RobotArm():
         self.portHandler.closePort()
 
 
-
-# basic usage demo:
-
+# Basic usage demo:
 if __name__ == "__main__":
-    arm = RobotArm(device_name='COM5', baudrate=1000000)
+    arm = RobotArm(device_name='COM4', baudrate=1000000)
 
     try:
-        #self.packetHandler.write2ByteTxRx(self.portHandler, self.DXL_ID, self.ADDR_MX_MOVING_SPEED, 100)
-        # enable torque on all motors
+        # Enable torque on all motors
         for motor_id in arm.DXL_IDS:
             arm.enable_torque(motor_id)
-            
 
-        # Define goal positions for each motor
-        goal_positions = [0, 0, 0, 0] 
-        arm.move_to_positions(goal_positions)
-        
+        # Define goal positions (in Dynamixel units) and speeds (0-1)
+        goal_positions = [0, 512, 800, 512]  # Target positions for each motor
+        speeds = [0.05, 0.1, 0.1, 0.1]  # Speeds for each motor (50%, 70%, 30%)
+
+        # Move motors to their goal positions at the specified speeds
+        arm.move_to_positions(goal_positions, speeds)
+
     finally:
         # Ensure proper cleanup
         arm.close()
-
-
-
-
-
-
-
-               # Enable torque and configure other settings for each Dynamixel
-                #for DXL_ID in DXL_IDS:
-                #    packetHandler.write1ByteTxRx(portHandler, DXL_ID, ADDR_MX_TORQUE_ENABLE, TORQUE_ENABLE)
-                #    packetHandler.write2ByteTxRx(portHandler, DXL_ID, ADDR_MX_CW_COMPLIANCE_MARGIN, 0)
-                #    packetHandler.write2ByteTxRx(portHandler, DXL_ID, ADDR_MX_CCW_COMPLIANCE_MARGIN, 0)
-                #    packetHandler.write1ByteTxRx(portHandler, DXL_ID, ADDR_MX_CW_COMPLIANCE_SLOPE, 32)
-                #    packetHandler.write1ByteTxRx(portHandler, DXL_ID, ADDR_MX_CCW_COMPLIANCE_SLOPE, 32)
-                #    packetHandler.write2ByteTxRx(portHandler, DXL_ID, ADDR_MX_MOVING_SPEED, 100)
-                    #packetHandler.write2ByteTxRx(portHandler, DXL_ID, ADDR_MX_GOAL_POSITION, 512) # function to move arm
-                    # instead of these functions we should be able to use the new ones i created below
-
-
-# figure out what to write to the robot joints
-# try to control the speed
-# how to include kinematics
-
-# try to copy the move_j function, use degree conversion like in myrobot
-# if that doesnt work, try to use chatgpt's method of mapping degrees
-# copy the function that checks if angle is within motor limits 
-
