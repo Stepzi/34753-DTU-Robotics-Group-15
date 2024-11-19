@@ -100,37 +100,6 @@ class RobotArm():
         for motor_id in self.motor_ids:
             result, error = self.packethandler.write1ByteTxRx(self)
 
-    def set_speed(self, speeds, overwrite_speeds):
-        #set_speed function for the MyRobot Class.
-        #   Sets individual motor speeds between 0# and 100#
-        #
-        #Inputs:
-        #   speeds : a vector representing motor speeds for each motor
-        #   ID between 0 and 1
-        #   overwrite_speeds: boolean, if true class internal motor
-        #   speeds are overwritten to motor speeds of function call
-        #Outputs:
-        #   None
-        if overwrite_speeds:
-            self.motor_speed = speeds
-
-        for motor_id, speed in zip(self.DXL_IDS, speeds):
-            if speeds(i) > 0 && speeds(i) <= 1
-                speed = speeds(i)*1023
-                self.packetHandler.write2ByteTxRx(self.port_num, self.PROTOCOL_VERSION, self.motor_ids(i), 32, speed)
-                dxl_comm_result = getLastTxRxResult(self.port_num, self.PROTOCOL_VERSION)
-                dxl_error = self.packetHandler.getLastRxPacketError(self.port_num, self.PROTOCOL_VERSION)
-                if dxl_comm_result ~= self.COMM_SUCCESS
-                    print('\n#s', self.packetHandler.getTxRxResult(self.PROTOCOL_VERSION, dxl_comm_result))
-                elseif dxl_error ~= 0
-                    print('\n#s', self.packetHandler.getRxPacketError(self.PROTOCOL_VERSION, dxl_error))
-                end
-            else
-                print("\nMovement speed out of range, enter value between ]0,1]") 
-            end
-        end
-    end
-
     def close(self):
         # Disable torque and close port before exiting
         for motor_id in self.DXL_IDS:
