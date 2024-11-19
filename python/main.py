@@ -1,9 +1,10 @@
 import time
 import numpy as np
-from dynamixelArm import RobotArm  
+from dynamixelArm import RobotArm 
+from digitalTwin import DigitalTwin 
 
 def main():
-    arm = RobotArm() 
+    arm = RobotArm(device_name="dev/ttyACM0")
     sampling_period = 0.1  # Frequency in seconds (1Hz = 1 second between updates)
     lastTime = 0
     startTime = time.time()
@@ -14,9 +15,11 @@ def main():
             if (time.time() - lastTime > sampling_period):
                 # move robot arm to next point
                 angle_deg = 30*np.sin(2*np.pi*0.5*(time.time()-startTime))
-                arm.set_joint_angle(2,arm.deg_to_rot(angle_deg)) # test with 1 motor for now
+                arm.set_joint_angle(2,np.deg2rad(angle_deg)) # test with 1 motor for now
                 lastTime = time.time()
-            print(arm.rot_to_deg(arm.get_joint_angle()))
+            arm.get_joint_angle()                
+            arm.twin.draw_arm()
+
     
     except KeyboardInterrupt:
         print('Interrupted')

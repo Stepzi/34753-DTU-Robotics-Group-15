@@ -1,5 +1,7 @@
 import sys, os
 import numpy as np
+from digitalTwin import DigitalTwin 
+
 
 # Add the Dynamixel SDK path to sys.path
 # sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), 'DynamixelSDK/python/src')))
@@ -7,7 +9,7 @@ import numpy as np
 import dynamixel_sdk as dxl
 
 class RobotArm():
-    def __init__(self, device_name='COM5', baudrate=1000000, protocol_version=1.0):
+    def __init__(self, device_name, baudrate=1000000, protocol_version=1.0):
         # initialize constants and configurations
         self.__ADDR_MX_TORQUE_ENABLE = 24
         self.__ADDR_MX_CW_COMPLIANCE_MARGIN = 26
@@ -21,13 +23,15 @@ class RobotArm():
         self.__TORQUE_ENABLE = 1
         self.__TORQUE_DISABLE = 0
         self.__DXL_MOVING_STATUS_THRESHOLD = 10  # Threshold for detecting movement completion
-        # self.__DXL_IDS = [1, 2, 3, 4]  # Motor IDs
-        self.__DXL_IDS = [2, 3, 4] # comment out motor 1 (robot 10)
+        self.__DXL_IDS = [1, 2, 3, 4]  # Motor IDs
+        # self.__DXL_IDS = [2, 3, 4] # comment out motor 1 (robot 10)
 
+        # Digital Twin
+        self.twin = DigitalTwin(self)
 
         # Robot Configuration
-        self.__SV_joint_angles = np.array([512,512,512,512])
-        self.__PV_joint_angles = np.array([0,0,0,0])
+        self.__SV_joint_angles = np.array([0,0,0,0], dtype=float) # radians
+        self.__PV_joint_angles = np.array([0,0,0,0], dtype=float) # radians
         self.__motor_speed = [0.1,0.1,0.1,0.1] 
        
 
@@ -62,22 +66,34 @@ class RobotArm():
         return links 
 
     # Kinematic Methods
-    def fwd_kin(self):
-        links = [] # List of Link Objects
-        return links 
+    def fwd_kin(self,frame=4,point=None):
+        T_global = [self._Links[0].T_local(0)]  # Base Frame
+        T_global.append(T_global[-1] @ self._Links[1].T_local(self.__PV_joint_angles[0]))
+        T_global.append(T_global[-1] @ self._Links[2].T_local(self.__PV_joint_angles[1]))
+        T_global.append(T_global[-1] @ self._Links[3].T_local(self.__PV_joint_angles[2]))
+        T_global.append(T_global[-1] @ self._Links[4].T_local(self.__PV_joint_angles[3]))
+                   
+        if  not point == None:
+            assert (point.shape == (4,4)), "reference point must be valid Transformation matrix"
+            T_global.append(T_global[-1] @ point)
+
+        return T_global
+          
 
     # Create "functions" for setting and moving motors:
     def enable_torque(self, motor_id):
-        # enable torque for a motor
-        result, error = self.__packetHandler.write1ByteTxRx(self.__portHandler, motor_id, self.__ADDR_MX_TORQUE_ENABLE, self.__TORQUE_ENABLE)
-        if result != dxl.COMM_SUCCESS:
-            print(f"Failed to enable torque for motor {motor_id}: {self.__packetHandler.getTxRxResult(result)}")
+        if self.__has_hardware:
+            # enable torque for a motor
+            result, error = self.__packetHandler.write1ByteTxRx(self.__portHandler, motor_id, self.__ADDR_MX_TORQUE_ENABLE, self.__TORQUE_ENABLE)
+            if result != dxl.COMM_SUCCESS:
+                print(f"Failed to enable torque for motor {motor_id}: {self.__packetHandler.getTxRxResult(result)}")
 
     def disable_torque(self, motor_id):
-        # Disable torque for a specific motor
-        result, error = self.__packetHandler.write1ByteTxRx(self.__portHandler, motor_id, self.__ADDR_MX_TORQUE_ENABLE, self.__TORQUE_DISABLE)
-        if result != dxl.COMM_SUCCESS:
-            print(f"Failed to disable torque for motor {motor_id}: {self.__packetHandler.getTxRxResult(result)}")
+         if self.__has_hardware:
+            # Disable torque for a specific motor
+            result, error = self.__packetHandler.write1ByteTxRx(self.__portHandler, motor_id, self.__ADDR_MX_TORQUE_ENABLE, self.__TORQUE_DISABLE)
+            if result != dxl.COMM_SUCCESS:
+                print(f"Failed to disable torque for motor {motor_id}: {self.__packetHandler.getTxRxResult(result)}")
 
     def deg_to_rot(self,deg):
         #deg_to_rot function for the robot arm class.
@@ -125,7 +141,7 @@ class RobotArm():
 
         if self.__has_hardware:
             # Set the target position for a motor
-            result, error = self.__packetHandler.write2ByteTxRx(self.__portHandler, self.__DXL_IDS[joint-1], self.__ADDR_MX_GOAL_POSITION, position)
+            result, error = self.__packetHandler.write2ByteTxRx(self.__portHandler, self.__DXL_IDS[joint-1], self.__ADDR_MX_GOAL_POSITION, self.rad_to_rot(position))
             if result != dxl.COMM_SUCCESS:
                 print(f"Failed to set goal position for motor {motor_id}: {self.__packetHandler.getTxRxResult(result)}")
 
@@ -193,11 +209,13 @@ class RobotArm():
                 result, error = self.__packetHandler.write2ByteTxRx(self.__portHandler,motor_id, self.__ADDR_MX_MOVING_SPEED, int(speed*1023))
                 if result != dxl.COMM_SUCCESS:
                     print(f"Failed to set speed for motor {motor_id}: {self.__packetHandler.getTxRxResult(result)}")
-    
-            
-    
+        
+    def get_cached_jointAngles(self):
+        return self.__PV_joint_angles
+
 
     def close(self):
+        self.twin.close()
         # Disable torque and close port before exiting
         if self.__has_hardware:
             for motor_id in self.__DXL_IDS:
@@ -255,6 +273,7 @@ if __name__ == "__main__":
         
     finally:
         # Ensure proper cleanup
+        
         arm.close()
 
 
