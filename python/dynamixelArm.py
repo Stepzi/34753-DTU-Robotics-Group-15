@@ -26,7 +26,6 @@ class RobotArm():
 
         self.__motor_speed = 0 
 
-
         # initialize __portHandler and __packetHandler
         self.__portHandler = dxl.PortHandler(device_name)
         self.__packetHandler = dxl.PacketHandler(protocol_version)
@@ -60,7 +59,18 @@ class RobotArm():
             #   deg : value [deg]
             #Outputs:
             #   rot : value in units per rotation of motor
-            return deg*1/0.29
+            return deg*1/0.293
+
+
+    def rad_to_rot(self,rad):
+            #rad_to_rot function for the MyRobot Class.
+            #   Converts radians to units per rotation of motors
+            #
+            #Inputs:
+            #   rad : value [rad]
+            #Outputs:
+            #   rot : value in units per rotation of motor
+            return self.deg_to_rot(np.rad2deg(rad))
 
     def set_goal_position(self, motor_id, position):
         # Set the target position for a motor
@@ -96,9 +106,12 @@ class RobotArm():
                 if abs(goal_pos - current_position) < self.__DXL_MOVING_STATUS_THRESHOLD:
                     break  # Movement complete for this motor
 
-    def set_torque(self, enable=True):
-        for motor_id in self.__DXL_IDS:
-            result, error = self.packethandler.write1ByteTxRx(self)
+    #TODO: Fix this function
+
+    # def set_torque(self, enable=True):
+    #     for motor_id in self.__DXL_IDS:
+    #         result, error = self.__packetHandler.write1ByteTxRx(self)
+           
 
     def set_speed(self, speeds, overwrite_speeds):
         #set_speed function for the MyRobot Class.
