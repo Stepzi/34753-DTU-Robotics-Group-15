@@ -7,7 +7,7 @@ import numpy as np
 import dynamixel_sdk as dxl
 
 class RobotArm():
-    def __init__(self, device_name='COM5', baudrate=1000000, protocol_version=1.0):
+    def __init__(self, device_name='COM8', baudrate=1000000, protocol_version=1.0):
         # initialize constants and configurations
         self.ADDR_MX_TORQUE_ENABLE = 24
         self.ADDR_MX_CW_COMPLIANCE_MARGIN = 26
@@ -22,10 +22,9 @@ class RobotArm():
         self.TORQUE_DISABLE = 0
         self.DXL_MOVING_STATUS_THRESHOLD = 10  # Threshold for detecting movement completion
         # self.DXL_IDS = [1, 2, 3, 4]  # Motor IDs
-        self.DXL_IDS = [2, 3, 4] # comment out motor 1 (robot 10)
+        self.DXL_IDS = [1, 2, 3, 4] # comment out motor 1 (robot 10)
 
         self.motor_speed = 0 
-
 
         # initialize portHandler and packetHandler
         self.portHandler = dxl.PortHandler(device_name)
@@ -106,19 +105,16 @@ class RobotArm():
             self.disable_torque(motor_id)
         self.portHandler.closePort()
 
-
-
 # basic usage demo:
 
 if __name__ == "__main__":
-    arm = RobotArm(device_name='/dev/ttyACM0', baudrate=1000000)
+    arm = RobotArm(device_name='COM8', baudrate=1000000)
 
     try:
         #self.packetHandler.write2ByteTxRx(self.portHandler, self.DXL_ID, self.ADDR_MX_MOVING_SPEED, 100)
         # enable torque on all motors
         for motor_id in arm.DXL_IDS:
             arm.enable_torque(motor_id)
-            
 
         # Define goal positions for each motor
         goal_positions = [512, 512, 512, 512] # 512 is the "zero" position. 512 at each motor will make the arm straight
@@ -128,12 +124,6 @@ if __name__ == "__main__":
     finally:
         # Ensure proper cleanup
         arm.close()
-
-
-
-
-
-
 
                # Enable torque and configure other settings for each Dynamixel
                 #for DXL_ID in DXL_IDS:
