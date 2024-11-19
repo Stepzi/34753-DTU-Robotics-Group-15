@@ -22,7 +22,7 @@ class RobotArm():
         self.TORQUE_DISABLE = 0
         self.DXL_MOVING_STATUS_THRESHOLD = 10  # Threshold for detecting movement completion
         # self.DXL_IDS = [1, 2, 3, 4]  # Motor IDs
-        self.DXL_IDS = [2, 3, 4]
+        self.DXL_IDS = [2, 3, 4] # comment out motor 1 (robot 10)
 
         self.motor_speed = 0 
 
@@ -38,7 +38,6 @@ class RobotArm():
             print(f"Failed to open port {device_name} and set baudrate")
             sys.exit(1)
 
-
     # Create "functions" for setting and moving motors:
 
     def enable_torque(self, motor_id):
@@ -46,8 +45,6 @@ class RobotArm():
         result, error = self.packetHandler.write1ByteTxRx(self.portHandler, motor_id, self.ADDR_MX_TORQUE_ENABLE, self.TORQUE_ENABLE)
         if result != dxl.COMM_SUCCESS:
             print(f"Failed to enable torque for motor {motor_id}: {self.packetHandler.getTxRxResult(result)}")
-
-
 
     def disable_torque(self, motor_id):
         # Disable torque for a specific motor
@@ -99,6 +96,10 @@ class RobotArm():
                 if abs(goal_pos - current_position) < self.DXL_MOVING_STATUS_THRESHOLD:
                     break  # Movement complete for this motor
 
+    def set_torque(self, enable=True):
+        for motor_id in self.motor_ids:
+            result, error = self.packethandler.write1ByteTxRx(self)
+
     def set_speed(self, speeds, overwrite_speeds):
         #set_speed function for the MyRobot Class.
         #   Sets individual motor speeds between 0# and 100#
@@ -147,7 +148,8 @@ if __name__ == "__main__":
             
 
         # Define goal positions for each motor
-        goal_positions = [220, 512, 512, 512] 
+        goal_positions = [512, 512, 512, 512] # 512 is the "zero" position. 512 at each motor will make the arm straight
+        # dont write to motor 1?
         arm.move_to_positions(goal_positions)
         
     finally:
