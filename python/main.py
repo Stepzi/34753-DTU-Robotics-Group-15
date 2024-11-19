@@ -4,7 +4,7 @@ from dynamixelArm import RobotArm
 
 def main():
     arm = RobotArm() 
-    sampling_period = 1  # Frequency in seconds (1Hz = 1 second between updates)
+    sampling_period = 0.1  # Frequency in seconds (1Hz = 1 second between updates)
     lastTime = 0
     startTime = time.time()
     trackingPoints = np.array([])
@@ -13,9 +13,13 @@ def main():
         while True:        
             if (time.time() - lastTime > sampling_period):
                 # move robot arm to next point
-                angle = 100*np.sin(2*np.pi*0.5*(time.time()-startTime))+512
-                arm.set_goal_position(2,angle) # test with 1 motor for now
+                angle_deg = 30*np.sin(2*np.pi*0.5*(time.time()-startTime))
+                arm.set_joint_angle(2,arm.deg_to_rot(angle_deg)) # test with 1 motor for now
                 lastTime = time.time()
+            print(arm.rot_to_deg(arm.get_joint_angle()))
+    
+    except KeyboardInterrupt:
+        print('Interrupted')
     finally:
         # Ensure proper cleanup
         arm.close()
@@ -24,3 +28,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    
