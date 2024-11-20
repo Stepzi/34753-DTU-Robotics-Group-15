@@ -24,9 +24,7 @@ class DigitalTwin():
                                  [T[0][2,3],T[1][2,3],T[2][2,3],T[3][2,3],T[4][2,3]])
         self.__fig.canvas.draw()
         plt.pause(0.05)
-        # print(T[2][0:3,3])
-        # print(self.__rbt.get_cached_jointAngles())
-
+        
     def close(self):
         plt.close()
     
@@ -34,17 +32,6 @@ class DigitalTwin():
 
 
 
-
-
-
-# import time
-# dt = DigitalTwin()
-# try:
-#     while True:
-#         dt.draw_arm()
-# except KeyboardInterrupt:
-#     plt.ioff()  # Turn off interactive mode
-#     plt.show()  # Keep the plot open after termination
 
 
 

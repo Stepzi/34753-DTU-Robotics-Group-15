@@ -41,7 +41,7 @@ class RobotArm():
         self.__SV_joint_angles = np.array([0,0,0,0], dtype=float) # [rad]
         with self.__lock:
             self.__PV_joint_angles = np.array([0,0,0,0], dtype=float) # [rad]
-        self.__motor_speeds = [10,10,10,10] # [rad/s] ]0,11.9]
+        self.__motor_speeds = [10,1,10,10] # [rad/s] ]0,11.9]
        
 
         # Build Kinematic Chain
@@ -236,34 +236,45 @@ class RobotArm():
         self.__motor_speeds = speeds
 
         for motor_id, speed in zip(self.__DXL_IDS, speeds):
-            assert (speed > 0 and speed <= 11.9),"Movement speed out of range, enter value between ]0,1]"
+            assert (speed > 0.0117 and speed <= 11.9),"Movement speed out of range, enter value between ]0,1]"
             if self.__has_hardware:
                 result, error = self.__packetHandler.write2ByteTxRx(self.__portHandler,motor_id, self.__ADDR_MX_MOVING_SPEED, int(self.radps_to_rot(speed)))
                 if result != dxl.COMM_SUCCESS:
                     print(f"Failed to set speed for motor {motor_id}: {self.__packetHandler.getTxRxResult(result)}")
         
     def _move_joints(self):
-        gain = 1
+        gain = 10
+        Ts = 0.01
         last = time.time()
         while self.__running:
             now = time.time()
             dt = now-last
             last = now
 
-            if dt > 0.01:
+            if dt > Ts:
                 with self.__lock:
                     SV = self.__SV_joint_angles
                     PV = self.__PV_joint_angles
                     speeds = self.__motor_speeds
 
-                # print(f"{dt},   {SV},   {PV}")
+                # print(f"{dt:.3f}, ",end='')
 
                 for i in range(0,4):
+                    # print(f"SV {i+1}: {SV[i]:.3f}, PV {i+1}: {PV[i]:.3f}, ",end='')
                     error = SV[i]-PV[i]
-                    dq = min(error*gain,speeds[i]*dt)
-                    if abs(dq) <= np.deg2rad(1.0):
-                        dq = 0.0
+                    # print(f"error {i+1}: {error:.3f}, ",end='')
+                    dq = error*gain*Ts
+                    
+                    if (abs(dq) > speeds[i]*Ts):
+                        dq = speeds[i]*Ts*np.sign(dq)
+                                        
+                    # if abs(dq) <= np.deg2rad(1.0):
+                    #     dq = 0.0
+                    # print(f"dq {i+1}: {dq:.3f}, ",end='')
+                    
                     PV[i] += dq
+                
+                # print("")
 
                 with self.__lock:
                     self.__PV_joint_angles = PV
