@@ -26,7 +26,6 @@ class RobotArm():
         self.__TORQUE_DISABLE = 0
         self.__DXL_MOVING_STATUS_THRESHOLD = 10  # Threshold for detecting movement completion
         self.__DXL_IDS = [1, 2, 3, 4]  # Motor IDs
-        # self.__DXL_IDS = [2, 3, 4] # comment out motor 1 (robot 10)
 
         # Digital Twin
         self.twin = DigitalTwin(self)
@@ -38,10 +37,10 @@ class RobotArm():
         
 
         # Robot Configuration
-        self.__SV_joint_angles = np.array([0,0,0,0], dtype=float) # [rad]
+        self.__SV_joint_angles = [0.0,0.0,0.0,0.0] # [rad]
         with self.__lock:
-            self.__PV_joint_angles = np.array([0,0,0,0], dtype=float) # [rad]
-        self.__motor_speeds = [10,1,10,10] # [rad/s] ]0,11.9]
+            self.__PV_joint_angles = [0.0,0.0,0.0,0.0] # [rad]
+        self.__motor_speeds = [10.0,1.0,10.0,10.0] # [rad/s] (0.0117,11.9)
        
 
         # Build Kinematic Chain
@@ -89,6 +88,49 @@ class RobotArm():
             T_global.append(T_global[-1] @ point)
 
         return T_global          
+
+    def inv_kin(self,gamma: float,point: list, elbow="up"):
+        """Computes the set of joint angles for desired tip position and orientation
+        
+        @param gamma: angle of stylus with horizontal plane [rad]
+        @param point: vector of  [x,y,z] of tip position [m]
+        @param elbow: string "up"/"down" for elbow-up/-down solution
+        @rtype: list
+        @returns: gamma vector of joint angles
+        """
+
+
+        ox = point[1]
+        oy = point[2]
+        oz = point[3]
+
+        # q1 = np.arctan2(oy,ox)
+
+        # w_x = ox-p.a4*np.cos(gamma)*np.cos(q1)
+        # w_y = oy-p.a4*np.cos(gamma)*np.sin(q1)
+        # w_z = oz-p.a4*np.sin(gamma)
+        # w = [w_xw_yw_z]
+
+
+        # r = np.sqrt(w_x^2 +w_y^2)
+
+        # s = w_z-p.d1
+        # cos3 = (r^2+s^2-p.a2^2-p.a3^2)/(2*p.a2*p.a3)
+        # if(elbow == "ElbowUp")
+        #     q3 = np.arctan2(-np.sqrt(1-cos3^2),cos3)
+        #     q2 = np.arctan2(-r,s)+np.arctan2(np.sqrt(1-cos3^2)*p.a3,p.a2+p.a3*cos3)
+        # else
+        #     q3 = np.arctan2(+np.sqrt(1-cos3^2),cos3)
+        #     q2 = np.arctan2(-r,s)-np.arctan2(np.sqrt(1-cos3^2)*p.a3,p.a2+p.a3*cos3)
+        # end
+
+
+        # q4 = gamma-np.pi/2-q2-q3
+
+        # q = [q1q2q3q4]
+
+
+
 
     # Create "functions" for setting and moving motors:
     def enable_torque(self, motor_id):
@@ -173,7 +215,7 @@ class RobotArm():
             # Set the target position for a motor
             result, error = self.__packetHandler.write2ByteTxRx(self.__portHandler, self.__DXL_IDS[joint-1], self.__ADDR_MX_GOAL_POSITION, self.rad_to_rot(position))
             if result != dxl.COMM_SUCCESS:
-                print(f"Failed to set goal position for motor {motor_id}: {self.__packetHandler.getTxRxResult(result)}")
+                print(f"Failed to set goal position for joint {joint}: {self.__packetHandler.getTxRxResult(result)}")
 
     def get_joint_angle(self, joint=None):
         if self.__has_hardware:
@@ -190,8 +232,6 @@ class RobotArm():
                     elif error != 0:
                         print(f"Error occurred while reading position for motor {motor_id}: {self.__packetHandler.getRxPacketError(error)}")
                         return None
-        # else:
-        #     self.__SV_joint_angles = self.__PV_joint_angles
 
         if joint == None:
             with self.__lock:
@@ -229,7 +269,6 @@ class RobotArm():
         #
         #Inputs:
         #   speeds : a vector representing motor speeds for each motor
-        #   ID between 0 and 1
         #Outputs:
         #   None
        
@@ -301,73 +340,29 @@ class RobotArm():
 class Link():
     def __init__(self,theta,d,a,alpha,type="revolute"):
 
-        self.__revolute = False
-        self.__theta = theta # joint angle is offset by this value (relevant for frame 2)
-        self.__d = d
-        self.__a = a
-        self.__alpha = alpha
+        self.revolute = False
+        self.theta = theta # joint angle is offset by this value (relevant for frame 2)
+        self.d = d
+        self.a = a
+        self.alpha = alpha
                 
         if type == "revolute":
-            self.__revolute = True
+            self.revolute = True
         
     def T_local(self,q):
-        if self.__revolute:
-           return np.array([[np.cos(q+self.__theta), -np.sin(q+self.__theta)*np.cos(self.__alpha), np.sin(q+self.__theta)*np.sin(self.__alpha), self.__a*np.cos(q+self.__theta)],
-                           [np.sin(q+self.__theta), np.cos(q+self.__theta)*np.cos(self.__alpha), -np.cos(q+self.__theta)*np.sin(self.__alpha), self.__a*np.sin(q+self.__theta)],
-                           [0, np.sin(self.__alpha), np.cos(self.__alpha), self.__d],
+        if self.revolute:
+           return np.array([[np.cos(q+self.theta), -np.sin(q+self.theta)*np.cos(self.alpha), np.sin(q+self.theta)*np.sin(self.alpha), self.a*np.cos(q+self.theta)],
+                           [np.sin(q+self.theta), np.cos(q+self.theta)*np.cos(self.alpha), -np.cos(q+self.theta)*np.sin(self.alpha), self.a*np.sin(q+self.theta)],
+                           [0, np.sin(self.alpha), np.cos(self.alpha), self.d],
                            [0, 0, 0, 1]]) 
         else:
-           return np.array([[np.cos(self.__theta), -np.sin(self.__theta)*np.cos(self.__alpha), np.sin(self.__theta)*np.sin(self.__alpha), self.__a*np.cos(self.__theta)],
-                           [np.sin(self.__theta), np.cos(self.__theta)*np.cos(self.__alpha), -np.cos(self.__theta)*np.sin(self.__alpha), self.__a*np.sin(self.__theta)],
-                           [0, np.sin(self.__alpha), np.cos(self.__alpha), q],
+           return np.array([[np.cos(self.theta), -np.sin(self.theta)*np.cos(self.alpha), np.sin(self.theta)*np.sin(self.alpha), self.a*np.cos(self.theta)],
+                           [np.sin(self.theta), np.cos(self.theta)*np.cos(self.alpha), -np.cos(self.theta)*np.sin(self.alpha), self.a*np.sin(self.theta)],
+                           [0, np.sin(self.alpha), np.cos(self.alpha), q],
                            [0, 0, 0, 1]]) 
     
     def T_global(self,parent,q):
         return parent @ self.T_local(q)
-
-
-
-# basic usage demo:
-
-if __name__ == "__main__":
-    arm = RobotArm(device_name='/dev/ttyACM0', baudrate=1000000)
-
-    try:
-        #self.__packetHandler.write2ByteTxRx(self.__portHandler, self.DXL_ID, self.__ADDR_MX_MOVING_SPEED, 100)
-        # enable torque on all motors
-        for motor_id in arm.__DXL_IDS:
-            arm.enable_torque(motor_id)
-
-        # Define speed for each motor
-        arm.set_speed([0.01, 0.01, 0.01, 0.01],True)
-            
-
-        # Define goal positions for each motor
-        goal_positions = [512, 512, 512, 512] # 512 is the "zero" position. 512 at each motor will make the arm straight
-        # dont write to motor 1?
-        arm.move_to_angles(goal_positions)
-        
-    finally:
-        # Ensure proper cleanup
-        
-        arm.close()
-
-
-
-
-
-
-
-               # Enable torque and configure other settings for each Dynamixel
-                #for DXL_ID in __DXL_IDS:
-                #    __packetHandler.write1ByteTxRx(__portHandler, DXL_ID, __ADDR_MX_TORQUE_ENABLE, __TORQUE_ENABLE)
-                #    __packetHandler.write2ByteTxRx(__portHandler, DXL_ID, __ADDR_MX_CW_COMPLIANCE_MARGIN, 0)
-                #    __packetHandler.write2ByteTxRx(__portHandler, DXL_ID, __ADDR_MX_CCW_COMPLIANCE_MARGIN, 0)
-                #    __packetHandler.write1ByteTxRx(__portHandler, DXL_ID, __ADDR_MX_CW_COMPLIANCE_SLOPE, 32)
-                #    __packetHandler.write1ByteTxRx(__portHandler, DXL_ID, __ADDR_MX_CCW_COMPLIANCE_SLOPE, 32)
-                #    __packetHandler.write2ByteTxRx(__portHandler, DXL_ID, __ADDR_MX_MOVING_SPEED, 100)
-                    #__packetHandler.write2ByteTxRx(__portHandler, DXL_ID, __ADDR_MX_GOAL_POSITION, 512) # function to move arm
-                    # instead of these functions we should be able to use the new ones i created below
 
 
 # how to include kinematics

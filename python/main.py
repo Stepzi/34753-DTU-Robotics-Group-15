@@ -4,7 +4,7 @@ from dynamixelArm import RobotArm
 
 def main():
     arm = RobotArm(device_name="dev/ttyACM0")
-    sampling_period = 10  # Frequency in seconds (1Hz = 1 second between updates)
+    sampling_period = 5  # Frequency in seconds (1Hz = 1 second between updates)
     lastTime = 0
     startTime = time.time()
     trackingPoints = np.array([])
