@@ -40,7 +40,7 @@ class RobotArm():
         self.__SV_joint_angles = [0.0,0.0,0.0,0.0] # [rad]
         with self.__lock:
             self.__PV_joint_angles = [0.0,0.0,0.0,0.0] # [rad]
-        self.__motor_speeds = [10.0,1.0,10.0,10.0] # [rad/s] (0.0117,11.9)
+        self.__motor_speeds = [2.0,2.0,2.0,2.0] # [rad/s] (0.0117,11.9)
        
 
         # Build Kinematic Chain
@@ -103,36 +103,39 @@ class RobotArm():
         @returns: gamma vector of joint angles
         """
 
-        # TODO: Convert point to frame{0}
+        # Convert point to frame{0}
+        point_in = point.copy()
+        point_in.append(1)
+        point_0 = np.linalg.inv(self.Frames[0].T_local()) @ np.array(point_in,dtype=float).reshape(4, 1)
 
-        ox = point[1]
-        oy = point[2]
-        oz = point[3]
+        ox = point_0[0]
+        oy = point_0[1]
+        oz = point_0[2]
 
-        # q1 = np.arctan2(oy,ox)
+        q1 = np.arctan2(oy,ox)
 
-        # w_x = ox-p.a4*np.cos(gamma)*np.cos(q1)
-        # w_y = oy-p.a4*np.cos(gamma)*np.sin(q1)
-        # w_z = oz-p.a4*np.sin(gamma)
-        # w = [w_xw_yw_z]
-
-
-        # r = np.sqrt(w_x^2 +w_y^2)
-
-        # s = w_z-p.d1
-        # cos3 = (r^2+s^2-p.a2^2-p.a3^2)/(2*p.a2*p.a3)
-        # if(elbow == "ElbowUp")
-        #     q3 = np.arctan2(-np.sqrt(1-cos3^2),cos3)
-        #     q2 = np.arctan2(-r,s)+np.arctan2(np.sqrt(1-cos3^2)*p.a3,p.a2+p.a3*cos3)
-        # else
-        #     q3 = np.arctan2(+np.sqrt(1-cos3^2),cos3)
-        #     q2 = np.arctan2(-r,s)-np.arctan2(np.sqrt(1-cos3^2)*p.a3,p.a2+p.a3*cos3)
-        # end
+        w_x = ox-self.Frames[4].a*np.cos(gamma)*np.cos(q1)
+        w_y = oy-self.Frames[4].a*np.cos(gamma)*np.sin(q1)
+        w_z = oz-self.Frames[4].a*np.sin(gamma)
+        
 
 
-        # q4 = gamma-np.pi/2-q2-q3
+        r = np.sqrt(w_x**2 +w_y**2)
+        s = w_z-self.Frames[1].d
 
-        # q = [q1q2q3q4]
+        assert (np.sqrt(r**2+s**2)<self.Frames[3].a+self.Frames[2].a), "Point outside reachable workspace"
+
+        cos3 = (r**2+s**2-self.Frames[2].a**2-self.Frames[3].a**2)/(2*self.Frames[2].a*self.Frames[3].a)
+        if(elbow == "up"):
+            q3 = np.arctan2(-np.sqrt(1-cos3**2),cos3)
+            q2 = np.arctan2(-r,s)+np.arctan2(np.sqrt(1-cos3**2)*self.Frames[3].a,self.Frames[2].a+self.Frames[3].a*cos3)
+        else:
+            q3 = np.arctan2(+np.sqrt(1-cos3**2),cos3)
+            q2 = np.arctan2(-r,s)-np.arctan2(np.sqrt(1-cos3**2)*self.Frames[3].a,self.Frames[2].a+self.Frames[3].a*cos3)
+        
+        q4 = gamma-np.pi/2-q2-q3
+
+        return [arr.item() for arr in [q1, q2, q3, q4]]
 
 
 
