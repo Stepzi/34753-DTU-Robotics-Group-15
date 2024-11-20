@@ -1,6 +1,8 @@
-import sys, os
 import numpy as np
 from digitalTwin import DigitalTwin 
+import threading
+import time
+
 
 
 # Add the Dynamixel SDK path to sys.path
@@ -29,15 +31,21 @@ class RobotArm():
         # Digital Twin
         self.twin = DigitalTwin(self)
 
+        # Setup Multithreading:
+        self.__lock = threading.Lock()
+        self.__running = True
+        self.__thread = threading.Thread(target=self._move_joints)
+        
+
         # Robot Configuration
-        self.__SV_joint_angles = np.array([0,0,0,0], dtype=float) # radians
-        self.__PV_joint_angles = np.array([0,0,0,0], dtype=float) # radians
-        self.__motor_speed = [0.1,0.1,0.1,0.1] 
+        self.__SV_joint_angles = np.array([0,0,0,0], dtype=float) # [rad]
+        with self.__lock:
+            self.__PV_joint_angles = np.array([0,0,0,0], dtype=float) # [rad]
+        self.__motor_speeds = [10,10,10,10] # [rad/s] ]0,11.9]
        
 
         # Build Kinematic Chain
-        self._Links = self.assemble_robot()
-
+        self._Links = self.assemble_robot()        
 
         # initialize __portHandler and __packetHandler
         self.__portHandler = dxl.PortHandler(device_name)
@@ -52,9 +60,9 @@ class RobotArm():
         except:
             print(f"Failed to open port {device_name} and set baudrate")
             self.__has_hardware = False
-            # sys.exit(1)
+            self.__thread.start()
 
-        self.set_speed(self.__motor_speed,overwrite_speeds=False)
+        self.set_speed(self.__motor_speeds)
 
     def assemble_robot(self):
         links = [] # List of Link Objects
@@ -67,18 +75,20 @@ class RobotArm():
 
     # Kinematic Methods
     def fwd_kin(self,frame=4,point=None):
+        with self.__lock:
+            joint_angles = self.__PV_joint_angles
+
         T_global = [self._Links[0].T_local(0)]  # Base Frame
-        T_global.append(T_global[-1] @ self._Links[1].T_local(self.__PV_joint_angles[0]))
-        T_global.append(T_global[-1] @ self._Links[2].T_local(self.__PV_joint_angles[1]))
-        T_global.append(T_global[-1] @ self._Links[3].T_local(self.__PV_joint_angles[2]))
-        T_global.append(T_global[-1] @ self._Links[4].T_local(self.__PV_joint_angles[3]))
+        T_global.append(T_global[-1] @ self._Links[1].T_local(joint_angles[0]))
+        T_global.append(T_global[-1] @ self._Links[2].T_local(joint_angles[1]))
+        T_global.append(T_global[-1] @ self._Links[3].T_local(joint_angles[2]))
+        T_global.append(T_global[-1] @ self._Links[4].T_local(joint_angles[3]))
                    
         if  not point == None:
             assert (point.shape == (4,4)), "reference point must be valid Transformation matrix"
             T_global.append(T_global[-1] @ point)
 
-        return T_global
-          
+        return T_global          
 
     # Create "functions" for setting and moving motors:
     def enable_torque(self, motor_id):
@@ -114,6 +124,26 @@ class RobotArm():
         #Outputs:
         #   rot : value in units per rotation of motor
         return self.deg_to_rot(np.rad2deg(rad))
+    
+    def radps_to_rot(self,radps):
+        #radps_to_rot function for the robot arm class.
+        #   Converts radians/s to units per rotation of motors
+        #
+        #Inputs:
+        #   rad : value [rad/s]
+        #Outputs:
+        #   rot : value in units per rotation of motor
+        return radps*86.03
+    
+    def rot_to_radps(self,rot):
+        #radps_to_rot function for the robot arm class.
+        #   Converts radians/s to units per rotation of motors
+        #
+        #Inputs:
+        #   rot : value [rot]
+        #Outputs:
+        #   radps : [rad/s]
+        return rot/86.03
 
     def rot_to_deg(self,rot):
         #rot_to_deg function for the robot arm class.
@@ -145,27 +175,31 @@ class RobotArm():
             if result != dxl.COMM_SUCCESS:
                 print(f"Failed to set goal position for motor {motor_id}: {self.__packetHandler.getTxRxResult(result)}")
 
-
     def get_joint_angle(self, joint=None):
         if self.__has_hardware:
             for i, motor_id in enumerate(self.__DXL_IDS):                 
                     # Attempt to read the present position for the specified motor
-                    self.__PV_joint_angles[i], result, error = self.__packetHandler.read2ByteTxRx(self.__portHandler, motor_id, self.__ADDR_MX_PRESENT_POSITION)
-                
+                    
+                    angle, result, error = self.__packetHandler.read2ByteTxRx(self.__portHandler, motor_id, self.__ADDR_MX_PRESENT_POSITION)
+                    with self.__lock:
+                        self.__PV_joint_angles[i] = self.rot_to_rad(angle)
+
                     if result != dxl.COMM_SUCCESS:
                         print(f"Failed to read position for motor {motor_id}: {self.__packetHandler.getTxRxResult(result)}")
                         return None
                     elif error != 0:
                         print(f"Error occurred while reading position for motor {motor_id}: {self.__packetHandler.getRxPacketError(error)}")
                         return None
-        else:
-            self.__PV_joint_angles = self.__SV_joint_angles
+        # else:
+        #     self.__SV_joint_angles = self.__PV_joint_angles
 
         if joint == None:
-            return self.__PV_joint_angles
+            with self.__lock:
+                return self.__PV_joint_angles
         else:
             assert (joint >= 1 and joint <= 4), f"Joint {joint} does not exist"
-            return self.__PV_joint_angles[joint-1]
+            with self.__lock:
+                return self.__PV_joint_angles[joint-1]
 
 
     def move_to_angles(self, goal_positions):
@@ -189,33 +223,64 @@ class RobotArm():
     #         result, error = self.__packetHandler.write1ByteTxRx(self)
            
 
-    def set_speed(self, speeds, overwrite_speeds):
+    def set_speed(self, speeds):
         #set_speed function for the robot arm class.
-        #   Sets individual motor speeds between 0# and 100#
+        #   Sets individual motor speeds in rad/s
         #
         #Inputs:
         #   speeds : a vector representing motor speeds for each motor
         #   ID between 0 and 1
-        #   overwrite_speeds: boolean, if true class internal motor
-        #   speeds are overwritten to motor speeds of function call
         #Outputs:
         #   None
-        if overwrite_speeds:
-            self.__motor_speed = speeds
+       
+        self.__motor_speeds = speeds
 
         for motor_id, speed in zip(self.__DXL_IDS, speeds):
-            assert (speed > 0 and speed <= 1),"Movement speed out of range, enter value between ]0,1]"
+            assert (speed > 0 and speed <= 11.9),"Movement speed out of range, enter value between ]0,1]"
             if self.__has_hardware:
-                result, error = self.__packetHandler.write2ByteTxRx(self.__portHandler,motor_id, self.__ADDR_MX_MOVING_SPEED, int(speed*1023))
+                result, error = self.__packetHandler.write2ByteTxRx(self.__portHandler,motor_id, self.__ADDR_MX_MOVING_SPEED, int(self.radps_to_rot(speed)))
                 if result != dxl.COMM_SUCCESS:
                     print(f"Failed to set speed for motor {motor_id}: {self.__packetHandler.getTxRxResult(result)}")
         
+    def _move_joints(self):
+        gain = 1
+        last = time.time()
+        while self.__running:
+            now = time.time()
+            dt = now-last
+            last = now
+
+            if dt > 0.01:
+                with self.__lock:
+                    SV = self.__SV_joint_angles
+                    PV = self.__PV_joint_angles
+                    speeds = self.__motor_speeds
+
+                # print(f"{dt},   {SV},   {PV}")
+
+                for i in range(0,4):
+                    error = SV[i]-PV[i]
+                    dq = min(error*gain,speeds[i]*dt)
+                    if abs(dq) <= np.deg2rad(1.0):
+                        dq = 0.0
+                    PV[i] += dq
+
+                with self.__lock:
+                    self.__PV_joint_angles = PV
+
+            time.sleep(0.01)
+    
     def get_cached_jointAngles(self):
-        return self.__PV_joint_angles
+        with self.__lock:
+            return self.__PV_joint_angles
 
 
     def close(self):
         self.twin.close()
+
+        self.__running = False
+        self.__thread.join()
+
         # Disable torque and close port before exiting
         if self.__has_hardware:
             for motor_id in self.__DXL_IDS:
