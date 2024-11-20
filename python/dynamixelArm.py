@@ -44,7 +44,7 @@ class RobotArm():
        
 
         # Build Kinematic Chain
-        self._Links = self.assemble_robot()        
+        self.Frames = self.assemble_robot()        
 
         # initialize __portHandler and __packetHandler
         self.__portHandler = dxl.PortHandler(device_name)
@@ -64,24 +64,28 @@ class RobotArm():
         self.set_speed(self.__motor_speeds)
 
     def assemble_robot(self):
-        links = [] # List of Link Objects
-        links.append(Link(theta=0,d=0.05,a=0,alpha = 0))           # Base Frame
-        links.append(Link(theta=0,d=0.05,a=0,alpha = np.pi/2))
-        links.append(Link(theta=np.pi/2,d=0,a=0.093,alpha = 0))
-        links.append(Link(theta=0,d=0,a=0.093,alpha = 0))
-        links.append(Link(theta=0,d=0,a=0.05,alpha = 0))
-        return links 
+        frames = [] # List of frame Objects
+        frames.append(Frame(T=np.array([[1, 0, 0, 0],
+                                        [0, 1, 0, 0],
+                                        [0, 0, 1, 0.05],
+                                        [0, 0, 0, 1]])))          # Base Frame
+        frames.append(Frame(DH_params={'theta': 0,      'd':0.05,   'a': 0,     'alpha': np.pi/2,   'type': "revolute"}))
+        frames.append(Frame(DH_params={'theta': np.pi/2,'d':0,      'a': 0.093, 'alpha': 0,         'type': "revolute"}))
+        frames.append(Frame(DH_params={'theta': 0,      'd':0,      'a': 0.093, 'alpha': 0,         'type': "revolute"}))
+        frames.append(Frame(DH_params={'theta': 0,      'd':0,      'a': 0.05,  'alpha': 0,         'type': "revolute"}))
+
+        return frames 
 
     # Kinematic Methods
     def fwd_kin(self,frame=4,point=None):
         with self.__lock:
             joint_angles = self.__PV_joint_angles
 
-        T_global = [self._Links[0].T_local(0)]  # Base Frame
-        T_global.append(T_global[-1] @ self._Links[1].T_local(joint_angles[0]))
-        T_global.append(T_global[-1] @ self._Links[2].T_local(joint_angles[1]))
-        T_global.append(T_global[-1] @ self._Links[3].T_local(joint_angles[2]))
-        T_global.append(T_global[-1] @ self._Links[4].T_local(joint_angles[3]))
+        T_global = [self.Frames[0].T_local(0)]  # Base Frame
+        T_global.append(T_global[-1] @ self.Frames[1].T_local(joint_angles[0]))
+        T_global.append(T_global[-1] @ self.Frames[2].T_local(joint_angles[1]))
+        T_global.append(T_global[-1] @ self.Frames[3].T_local(joint_angles[2]))
+        T_global.append(T_global[-1] @ self.Frames[4].T_local(joint_angles[3]))
                    
         if  not point == None:
             assert (point.shape == (4,4)), "reference point must be valid Transformation matrix"
@@ -93,12 +97,13 @@ class RobotArm():
         """Computes the set of joint angles for desired tip position and orientation
         
         @param gamma: angle of stylus with horizontal plane [rad]
-        @param point: vector of  [x,y,z] of tip position [m]
+        @param point: vector of  [x,y,z] in global frame of tip position [m]
         @param elbow: string "up"/"down" for elbow-up/-down solution
         @rtype: list
         @returns: gamma vector of joint angles
         """
 
+        # TODO: Convert point to frame{0}
 
         ox = point[1]
         oy = point[2]
@@ -337,32 +342,47 @@ class RobotArm():
                 self.disable_torque(motor_id)
             self.__portHandler.closePort()
 
-class Link():
-    def __init__(self,theta,d,a,alpha,type="revolute"):
 
-        self.revolute = False
-        self.theta = theta # joint angle is offset by this value (relevant for frame 2)
-        self.d = d
-        self.a = a
-        self.alpha = alpha
-                
-        if type == "revolute":
-            self.revolute = True
-        
-    def T_local(self,q):
+            
+class Frame:
+    def __init__(self, DH_params=None, T=None):
+        if (DH_params is not None) and (T is not None):
+            raise ValueError("Invalid argument, only accepts either DH or Transformation Matrix")
+
+        self.T = T  # Initialize T to None or the provided transformation matrix
+
+        if DH_params is not None:
+            self.is_Link = True
+            self.revolute = False
+            self.theta = DH_params['theta']  # joint angle is offset by this value (relevant for frame 2)
+            self.d = DH_params['d']
+            self.a = DH_params['a']
+            self.alpha = DH_params['alpha']
+
+            if DH_params['type'] == "revolute":
+                self.revolute = True
+
+        elif T is not None:
+            # If T is provided, we can set it directly
+            self.T = T
+
+    def T_local(self, q=None):
+        if self.T is not None:
+            return self.T  # Return the provided transformation matrix if it exists
+
         if self.revolute:
-           return np.array([[np.cos(q+self.theta), -np.sin(q+self.theta)*np.cos(self.alpha), np.sin(q+self.theta)*np.sin(self.alpha), self.a*np.cos(q+self.theta)],
-                           [np.sin(q+self.theta), np.cos(q+self.theta)*np.cos(self.alpha), -np.cos(q+self.theta)*np.sin(self.alpha), self.a*np.sin(q+self.theta)],
-                           [0, np.sin(self.alpha), np.cos(self.alpha), self.d],
-                           [0, 0, 0, 1]]) 
+            return np.array([[np.cos(q + self.theta), -np.sin(q + self.theta) * np.cos(self.alpha), np.sin(q + self.theta) * np.sin(self.alpha), self.a * np.cos(q + self.theta)],
+                             [np.sin(q + self.theta), np.cos(q + self.theta) * np.cos(self.alpha), -np.cos(q + self.theta) * np.sin(self.alpha), self.a * np.sin(q + self.theta)],
+                             [0, np.sin(self.alpha), np.cos(self.alpha), self.d],
+                             [0, 0, 0, 1]])
         else:
-           return np.array([[np.cos(self.theta), -np.sin(self.theta)*np.cos(self.alpha), np.sin(self.theta)*np.sin(self.alpha), self.a*np.cos(self.theta)],
-                           [np.sin(self.theta), np.cos(self.theta)*np.cos(self.alpha), -np.cos(self.theta)*np.sin(self.alpha), self.a*np.sin(self.theta)],
-                           [0, np.sin(self.alpha), np.cos(self.alpha), q],
-                           [0, 0, 0, 1]]) 
+            return np.array([[np.cos(self.theta), -np.sin(self.theta) * np.cos(self.alpha), np.sin(self.theta) * np.sin(self.alpha), self.a * np.cos(self.theta)],
+                             [np.sin(self.theta), np.cos(self.theta) * np.cos(self.alpha), -np.cos(self.theta) * np.sin(self.alpha), self.a * np.sin(self.theta)],
+                             [0, np.sin(self.alpha), np.cos(self.alpha), q],
+                             [0, 0, 0, 1]])
+        
     
-    def T_global(self,parent,q):
-        return parent @ self.T_local(q)
+
 
 
 # how to include kinematics
