@@ -64,55 +64,128 @@ class RobotArm():
         self.set_speed(self.__motor_speeds)
 
     def assemble_robot(self):
-        frames = [] # List of frame Objects
+        frames = [] # List of frame Objects, ORDER is important, first {0} in global then all links, then the rest
+        # Base Frame
         frames.append(Frame(T=np.array([[1, 0, 0, 0],
                                         [0, 1, 0, 0],
                                         [0, 0, 1, 0.05],
-                                        [0, 0, 0, 1]])))          # Base Frame
+                                        [0, 0, 0, 1]])))
+        # Link 1          
         frames.append(Frame(DH_params={'theta': 0,      'd':0.05,   'a': 0,     'alpha': np.pi/2,   'type': "revolute"}))
+        # Link 2
         frames.append(Frame(DH_params={'theta': np.pi/2,'d':0,      'a': 0.093, 'alpha': 0,         'type': "revolute"}))
+        # Link 3
         frames.append(Frame(DH_params={'theta': 0,      'd':0,      'a': 0.093, 'alpha': 0,         'type': "revolute"}))
+        # Link 4
         frames.append(Frame(DH_params={'theta': 0,      'd':0,      'a': 0.05,  'alpha': 0,         'type': "revolute"}))
+        # Tool
+        frames.append(Frame(T=np.array([[1, 0, 0, 0.0],
+                                        [0, 1, 0, 0.0],
+                                        [0, 0, 1, 0.05],
+                                        [0, 0, 0, 1]])))
 
         return frames 
 
     # Kinematic Methods
-    def fwd_kin(self,frame=4,point=None):
+    def fwd_kin(self):
         with self.__lock:
             joint_angles = self.__PV_joint_angles
 
         T_global = [self.Frames[0].T_local(0)]  # Base Frame
-        T_global.append(T_global[-1] @ self.Frames[1].T_local(joint_angles[0]))
-        T_global.append(T_global[-1] @ self.Frames[2].T_local(joint_angles[1]))
-        T_global.append(T_global[-1] @ self.Frames[3].T_local(joint_angles[2]))
-        T_global.append(T_global[-1] @ self.Frames[4].T_local(joint_angles[3]))
+        for i, frame in enumerate(self.Frames[1:]):
+            if frame.is_Link:                
+                T_global.append(T_global[-1] @ frame.T_local(joint_angles[i]))
+            else:
+                T_global.append(T_global[-1] @ frame.T_local())
+            # T_global.append(T_global[-1] @ self.Frames[2].T_local(joint_angles[1]))
+            # T_global.append(T_global[-1] @ self.Frames[3].T_local(joint_angles[2]))
+            # T_global.append(T_global[-1] @ self.Frames[4].T_local(joint_angles[3]))
+            # T_global.append(T_global[-1] @ self.Frames[5].T_local())
                    
-        if  not point == None:
-            assert (point.shape == (4,4)), "reference point must be valid Transformation matrix"
-            T_global.append(T_global[-1] @ point)
+        # if  not point == None:
+        #     assert (point.shape == (4,4)), "reference point must be valid Transformation matrix"
+        #     T_global.append(T_global[-1] @ point)
 
         return T_global          
 
-    def inv_kin(self,gamma: float,point: list, elbow="up"):
+    def inv_kin(self,gamma: float,origin: list, elbow="up",tool=None):
         """Computes the set of joint angles for desired tip position and orientation
         
         @param gamma: angle of stylus with horizontal plane [rad]
-        @param point: vector of  [x,y,z] in global frame of tip position [m]
+        @param origin: vector of  [x,y,z] in global frame of tip position [m]
         @param elbow: string "up"/"down" for elbow-up/-down solution
+        @param tool: Local Transformation to tool in frame {4}
         @rtype: list
         @returns: gamma vector of joint angles
         """
 
-        # Convert point to frame{0}
-        point_in = point.copy()
-        point_in.append(1)
-        point_0 = np.linalg.inv(self.Frames[0].T_local()) @ np.array(point_in,dtype=float).reshape(4, 1)
+        if tool is not None:
+            x_tool_4 = tool[0,3]
+            y_tool_4 = tool[1,3]
+            z_tool_4 = tool[2,3]
 
-        ox = point_0[0]
-        oy = point_0[1]
-        oz = point_0[2]
+            tool_g = np.array(origin,dtype=float).reshape(3,1)  # make numpy vector
+            tool_g = np.insert(tool_g, 3, 1, axis=0)            # append 1 at (4,1)
 
-        q1 = np.arctan2(oy,ox)
+            tool_0 = np.linalg.inv(self.Frames[0].T_local()) @ tool_g   # transform from {g} to {0} p_T^0 = T_g^0 * p_T^g
+
+            x_tool_0 = tool_0[0]
+            y_tool_0 = tool_0[1]
+            z_tool_0 = tool_0[2]
+
+            a1 = np.arctan2(y_tool_0,x_tool_0)
+            l = np.sqrt(x_tool_0**2+y_tool_0**2)
+            h = np.sqrt(l**2-z_tool_4**2)
+            a2 = np.arctan2(z_tool_4,h)
+
+            q1 = a1+a2
+
+            T_T0 = np.array([[(np.cos(gamma)*np.cos(q1)).item(), (-np.cos(q1)*np.sin(gamma)).item(),  np.sin(q1).item(), x_tool_0.item()],
+            [(np.cos(gamma)*np.sin(q1)).item(), (-np.sin(gamma)*np.sin(q1)).item(), (-np.cos(q1)).item(),y_tool_0.item()],
+            [np.sin(gamma).item(),np.cos(gamma).item(),0,z_tool_0.item()],
+            [0,0,0,1]])
+
+
+            T_40 = T_T0 @ np.linalg.inv(tool)
+            x_4z = T_40[2,0]
+            tip_0 = T_40[0:3,3]
+
+
+            gamma = np.arctan2(x_4z,np.sqrt(1-x_4z**2))
+
+
+
+
+            # r21 = tool[1,0]
+            # epsilon = np.arctan2(r21,np.sqrt(1-r21**2))
+            # gamma_star = gamma-epsilon
+            # sin_a2 = z_tool_4/(np.sqrt(x_tool_0**2+y_tool_0**2))
+            # a2 = np.arctan2(sin_a2,np.sqrt(1-sin_a2**2))
+            # a1 = np.arctan2(y_tool_0,x_tool_0)
+            # q1 = a1+a2
+
+            # tip_x_0 = x_tool_0 + y_tool_4*np.sin(gamma_star)*np.cos(q1) - x_tool_4*np.cos(gamma_star)*np.cos(q1)
+            # tip_y_0 = y_tool_0 - z_tool_4*np.sin(q1) - x_tool_4*np.sin(q1)
+            # tip_z_0 = z_tool_0 - y_tool_4*np.cos(gamma_star) - x_tool_4*np.sin(gamma_star)
+
+            # tip_0 = np.array([tip_x_0, tip_y_0, tip_z_0],dtype=float).reshape(3,1)
+            # gamma = gamma_star
+
+        else:
+            tip_g = np.array(origin,dtype=float).reshape(3,1)  # make numpy vector
+            tip_g = np.insert(tip_g, 3, 1, axis=0)            # append 1 at (4,1)
+
+            tip_0 = np.linalg.inv(self.Frames[0].T_local()) @ tip_g   # transform from {g} to {0}
+        
+        
+        ox = tip_0[0]
+        oy = tip_0[1]
+        oz = tip_0[2]
+
+
+
+        if tool is None:
+            q1 = np.arctan2(oy,ox)
 
         w_x = ox-self.Frames[4].a*np.cos(gamma)*np.cos(q1)
         w_y = oy-self.Frames[4].a*np.cos(gamma)*np.sin(q1)
@@ -353,6 +426,7 @@ class Frame:
             raise ValueError("Invalid argument, only accepts either DH or Transformation Matrix")
 
         self.T = T  # Initialize T to None or the provided transformation matrix
+        self.is_Link = False
 
         if DH_params is not None:
             self.is_Link = True
