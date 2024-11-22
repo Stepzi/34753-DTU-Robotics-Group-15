@@ -15,13 +15,17 @@ class DigitalTwin():
         self.__ax.set_ylabel('Y')
         self.__ax.set_zlabel('Z')
         self.__l1 = self.__ax.plot([],[],[], "k", marker=".", markersize=10, linewidth=3)
+        self.__l2 = self.__ax.plot([],[],[], "r",linestyle='None', marker=".", markersize=10, linewidth=3)
 
 
     def draw_arm(self):
         T = self.__rbt.fwd_kin()
-        self.__l1[0].set_data_3d([T[0][0,3],T[1][0,3],T[2][0,3],T[3][0,3],T[4][0,3],T[5][0,3]],
-                                 [T[0][1,3],T[1][1,3],T[2][1,3],T[3][1,3],T[4][1,3],T[5][1,3]],
-                                 [T[0][2,3],T[1][2,3],T[2][2,3],T[3][2,3],T[4][2,3],T[5][2,3]])
+        self.__l1[0].set_data_3d([T[0][0,3],T[1][0,3],T[2][0,3],T[3][0,3],T[4][0,3]],
+                                 [T[0][1,3],T[1][1,3],T[2][1,3],T[3][1,3],T[4][1,3]],
+                                 [T[0][2,3],T[1][2,3],T[2][2,3],T[3][2,3],T[4][2,3]])
+        self.__l2[0].set_data_3d([T[5][0,3]],
+                                 [T[5][1,3]],
+                                 [T[5][2,3]])
         self.__fig.canvas.draw()
         plt.pause(0.05)
         

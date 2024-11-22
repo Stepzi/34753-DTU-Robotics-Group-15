@@ -11,7 +11,10 @@ import time
 import dynamixel_sdk as dxl
 
 class RobotArm():
-    def __init__(self, device_name, baudrate=1000000, protocol_version=1.0):
+    def __init__(self, device_name, end_effector="straight", baudrate=1000000, protocol_version=1.0):
+        if end_effector not in ["straight", "angled"]:
+            raise ValueError("end_effector must be either 'straight' or 'angled'")
+        
         # initialize constants and configurations
         self.__ADDR_MX_TORQUE_ENABLE = 24
         self.__ADDR_MX_CW_COMPLIANCE_MARGIN = 26
@@ -34,14 +37,15 @@ class RobotArm():
         self.__lock = threading.Lock()
         self.__running = True
         self.__thread = threading.Thread(target=self._move_joints)
+        self.__thread.start()
         
 
         # Robot Configuration
         self.__SV_joint_angles = [0.0,0.0,0.0,0.0] # [rad]
         with self.__lock:
             self.__PV_joint_angles = [0.0,0.0,0.0,0.0] # [rad]
-        self.__motor_speeds = [2.0,2.0,2.0,2.0] # [rad/s] (0.0117,11.9)
-       
+        self.__motor_speeds = [0.5,0.5,0.5,0.5] # [rad/s] (0.0117,11.9)
+        self.__end_effector = end_effector
 
         # Build Kinematic Chain
         self.Frames = self.assemble_robot()        
@@ -59,9 +63,10 @@ class RobotArm():
         except:
             print(f"Failed to open port {device_name} and set baudrate")
             self.__has_hardware = False
-            self.__thread.start()
+            
 
         self.set_speed(self.__motor_speeds)
+        self.move_to_angles(self.__SV_joint_angles)
 
     def assemble_robot(self):
         frames = [] # List of frame Objects, ORDER is important, first {0} in global then all links, then the rest
@@ -71,18 +76,26 @@ class RobotArm():
                                         [0, 0, 1, 0.05],
                                         [0, 0, 0, 1]])))
         # Link 1          
-        frames.append(Frame(DH_params={'theta': 0,      'd':0.05,   'a': 0,     'alpha': np.pi/2,   'type': "revolute"}))
+        frames.append(Frame(DH_params={'theta': 0,      'd':0.04,   'a': 0,     'alpha': np.pi/2,   'type': "revolute"}))
         # Link 2
         frames.append(Frame(DH_params={'theta': np.pi/2,'d':0,      'a': 0.093, 'alpha': 0,         'type': "revolute"}))
         # Link 3
         frames.append(Frame(DH_params={'theta': 0,      'd':0,      'a': 0.093, 'alpha': 0,         'type': "revolute"}))
         # Link 4
-        frames.append(Frame(DH_params={'theta': 0,      'd':0,      'a': 0.05,  'alpha': 0,         'type': "revolute"}))
-        # Tool
-        frames.append(Frame(T=np.array([[1, 0, 0, 0.0],
-                                        [0, 1, 0, 0.0],
-                                        [0, 0, 1, 0.05],
-                                        [0, 0, 0, 1]])))
+        if self.__end_effector == "straight":
+            frames.append(Frame(DH_params={'theta': 0,      'd':0,      'a': 0.05,  'alpha': 0,         'type': "revolute"}))
+             # Tool
+            frames.append(Frame(T=np.array([[1, 0, 0, 0.0],
+                                            [0, 1, 0, 0.015],
+                                            [0, 0, 1, 0.0],
+                                            [0, 0, 0, 1]])))
+        elif self.__end_effector == "angled":
+            frames.append(Frame(DH_params={'theta': -np.pi/2,      'd':0,      'a': 0.05,  'alpha': 0,         'type': "revolute"}))
+            # Tool
+            frames.append(Frame(T=np.array([[1, 0, 0, 0.0],
+                                            [0, 1, 0, 0.015],
+                                            [0, 0, 1, 0.0],
+                                            [0, 0, 0, 1]])))
 
         return frames 
 
@@ -206,7 +219,10 @@ class RobotArm():
             q3 = np.arctan2(+np.sqrt(1-cos3**2),cos3)
             q2 = np.arctan2(-r,s)-np.arctan2(np.sqrt(1-cos3**2)*self.Frames[3].a,self.Frames[2].a+self.Frames[3].a*cos3)
         
-        q4 = gamma-np.pi/2-q2-q3
+        if self.__end_effector == "straight":
+            q4 = gamma-np.pi/2-q2-q3
+        elif self.__end_effector == "angled":
+            q4 = gamma-np.pi/2-q2-q3 + np.pi/2
 
         return [arr.item() for arr in [q1, q2, q3, q4]]
 
@@ -236,7 +252,7 @@ class RobotArm():
         #   deg : value [deg]
         #Outputs:
         #   rot : value in units per rotation of motor
-        return deg*1/0.293+512
+        return int(deg*1/0.293+512)
 
     def rad_to_rot(self,rad):
         #rad_to_rot function for the robot arm class.
@@ -363,7 +379,7 @@ class RobotArm():
                     print(f"Failed to set speed for motor {motor_id}: {self.__packetHandler.getTxRxResult(result)}")
         
     def _move_joints(self):
-        gain = 10
+        gain = 30
         Ts = 0.01
         last = time.time()
         while self.__running:
