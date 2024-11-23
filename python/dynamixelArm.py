@@ -2,6 +2,7 @@ import numpy as np
 from digitalTwin import DigitalTwin 
 import threading
 import time
+import matplotlib.pyplot as plt
 
 
 
@@ -27,7 +28,7 @@ class RobotArm():
         self.__ADDR_MX_PUNCH = 48
         self.__TORQUE_ENABLE = 1
         self.__TORQUE_DISABLE = 0
-        self.__DXL_MOVING_STATUS_THRESHOLD = 10  # Threshold for detecting movement completion
+        self.__DXL_MOVING_STATUS_THRESHOLD = 0.05  # [rad] Threshold for detecting movement completion
         self.__DXL_IDS = [1, 2, 3, 4]  # Motor IDs
 
         # Digital Twin
@@ -44,7 +45,7 @@ class RobotArm():
         self.__SV_joint_angles = [0.0,0.0,0.0,0.0] # [rad]
         with self.__lock:
             self.__PV_joint_angles = [0.0,0.0,0.0,0.0] # [rad]
-        self.__motor_speeds = [0.5,0.5,0.5,0.5] # [rad/s] (0.0117,11.9)
+        self.__motor_speeds = [1,1,1,1] # [rad/s] (0.0117,11.9)
         self.__end_effector = end_effector
 
         # Build Kinematic Chain
@@ -85,8 +86,8 @@ class RobotArm():
         if self.__end_effector == "straight":
             frames.append(Frame(DH_params={'theta': 0,      'd':0,      'a': 0.05,  'alpha': 0,         'type': "revolute"}))
              # Tool
-            frames.append(Frame(T=np.array([[1, 0, 0, 0.0],
-                                            [0, 1, 0, 0.015],
+            frames.append(Frame(T=np.array([[0, 1, 0, 0.0],
+                                            [-1, 0, 0, -0.05],
                                             [0, 0, 1, 0.0],
                                             [0, 0, 0, 1]])))
         elif self.__end_effector == "angled":
@@ -100,9 +101,12 @@ class RobotArm():
         return frames 
 
     # Kinematic Methods
-    def fwd_kin(self):
-        with self.__lock:
-            joint_angles = self.__PV_joint_angles
+    def fwd_kin(self,q=None):
+        if q is None:
+            with self.__lock:
+                joint_angles = self.__PV_joint_angles
+        else:
+            joint_angles = q
 
         T_global = [self.Frames[0].T_local(0)]  # Base Frame
         for i, frame in enumerate(self.Frames[1:]):
@@ -110,14 +114,6 @@ class RobotArm():
                 T_global.append(T_global[-1] @ frame.T_local(joint_angles[i]))
             else:
                 T_global.append(T_global[-1] @ frame.T_local())
-            # T_global.append(T_global[-1] @ self.Frames[2].T_local(joint_angles[1]))
-            # T_global.append(T_global[-1] @ self.Frames[3].T_local(joint_angles[2]))
-            # T_global.append(T_global[-1] @ self.Frames[4].T_local(joint_angles[3]))
-            # T_global.append(T_global[-1] @ self.Frames[5].T_local())
-                   
-        # if  not point == None:
-        #     assert (point.shape == (4,4)), "reference point must be valid Transformation matrix"
-        #     T_global.append(T_global[-1] @ point)
 
         return T_global          
 
@@ -166,24 +162,6 @@ class RobotArm():
 
             gamma = np.arctan2(x_4z,np.sqrt(1-x_4z**2))
 
-
-
-
-            # r21 = tool[1,0]
-            # epsilon = np.arctan2(r21,np.sqrt(1-r21**2))
-            # gamma_star = gamma-epsilon
-            # sin_a2 = z_tool_4/(np.sqrt(x_tool_0**2+y_tool_0**2))
-            # a2 = np.arctan2(sin_a2,np.sqrt(1-sin_a2**2))
-            # a1 = np.arctan2(y_tool_0,x_tool_0)
-            # q1 = a1+a2
-
-            # tip_x_0 = x_tool_0 + y_tool_4*np.sin(gamma_star)*np.cos(q1) - x_tool_4*np.cos(gamma_star)*np.cos(q1)
-            # tip_y_0 = y_tool_0 - z_tool_4*np.sin(q1) - x_tool_4*np.sin(q1)
-            # tip_z_0 = z_tool_0 - y_tool_4*np.cos(gamma_star) - x_tool_4*np.sin(gamma_star)
-
-            # tip_0 = np.array([tip_x_0, tip_y_0, tip_z_0],dtype=float).reshape(3,1)
-            # gamma = gamma_star
-
         else:
             tip_g = np.array(origin,dtype=float).reshape(3,1)  # make numpy vector
             tip_g = np.insert(tip_g, 3, 1, axis=0)            # append 1 at (4,1)
@@ -195,15 +173,12 @@ class RobotArm():
         oy = tip_0[1]
         oz = tip_0[2]
 
-
-
         if tool is None:
             q1 = np.arctan2(oy,ox)
 
         w_x = ox-self.Frames[4].a*np.cos(gamma)*np.cos(q1)
         w_y = oy-self.Frames[4].a*np.cos(gamma)*np.sin(q1)
         w_z = oz-self.Frames[4].a*np.sin(gamma)
-        
 
 
         r = np.sqrt(w_x**2 +w_y**2)
@@ -226,8 +201,169 @@ class RobotArm():
 
         return [arr.item() for arr in [q1, q2, q3, q4]]
 
+    def jacobian(self,frame_no: int,q=None):
+        """Computes the jacobian for a frame
+        
+        @param frame_no: frame number   
+        @param q: joint configuration, if omitted, current PV_angles
+        @returns: Jacobian Matrix in base frame
+        """
+
+        T_g = self.fwd_kin(q)
+        J = np.zeros((6,4))
+
+        for i in range(1,5): #iterate through frame 1 -> frame number
+                z_i_1 = T_g[i-1][0:3,2]
+                o_n = T_g[frame_no][0:3,3]
+                o_i_1 = T_g[i-1][0:3,3]
+
+                if self.Frames[i].revolute:
+                    
+                    J[0:3,i-1] = np.cross(z_i_1,(o_n-o_i_1))
+                    J[3:6,i-1] = z_i_1
+                else:
+                    J[0:3,i-1] = z_i_1
+                    J[3:6,i-1] = 0
+
+        return J
+
+    
+    def poly_interpol(self,A: list,B:list,tA,tB,order = 5):
+        assert (order in [5]), f"Order {order} is not supported"
+        assert (len(A) == (order+1)/2 and len(B) == (order+1)/2), "Missing boundary conditions for selected order"
+        
+        boundary_cond = A.copy()        
+        boundary_cond.extend(B)
+
+        boundary_cond = np.array(boundary_cond).reshape(order+1,1)
+
+        T = np.array([[1,tA,tA**2,tA**3,tA**4,tA**5],
+                      [0,1,2*tA,3*tA**2,4*tA**3,5*tA**4],
+                      [0,0,2,6*tA,12*tA**2,20*tA**3],
+                      [1,tB,tB**2,tB**3,tB**4,tB**5],
+                      [0,1,2*tB,3*tB**2,4*tB**3,5*tB**4],
+                      [0,0,2,6*tB,12*tB**2,20*tB**3]])
+        
+
+        return np.linalg.inv(T) @ boundary_cond
+
+    def poly_traj(self,frame_no,A: dict,B: dict,tA,tB,order):
+        """Smoothly interpolates between two configurations A and B       
+        
+        The configuration Dicts contain the following key-value pairs:
+        {'gamma': gamma [rad],'origin': [x,y,z] in {g}, 'elbow':"up"/"down",
+          'v': [v_x, v_y ,v_z], 'gamma_d': [rad/s]}
+
+        @param frame_no: frame number > 3  
+        @param A: dict of configuration at time tA
+        @param B: dict of configuration at time tB
+        @param tA: time tA
+        @param tB: time tB
+        @param order: order of polynomial
+        @returns: Trajectory Object
+        """
+        assert frame_no > 3, "Cant compute inverse Kinematics for non-endeffecor Links"
+        
+        tool = None
+        if frame_no > 4:
+            tool = self.Frames[frame_no].T_local()
+
+        qA = self.inv_kin(A['gamma'],A['origin'],elbow=A['elbow'],tool=tool)
+        qB = self.inv_kin(B['gamma'],B['origin'],elbow=B['elbow'],tool=tool)
 
 
+        # Assume velocity in {g} and gamma_d is given. 
+        # Compute remaining:
+
+        # normally: [x_d, y_d, z_d, w_x, w_y, w_z]' = J * q_d
+        # to find inverse use pinv. But we dont know w_x, w_y, w_z but instead gamma_d
+        # r_31 = sin(gamma) -> r_31_d = cos(gamma)*gamma_d
+        # we want to find the matrix M that reduces the Jacobian to 4x4
+        # we know (skew symmetric Matrix) R_d[0:3,2] = R_yx*w_x - R_xx*w_y = r_31_d = cos(gamma)*gamma_d
+        # [x_d, y_d, z_d, r_31_d]' = M * [x_d, y_d, z_d, w_x, w_y, w_z]'
+        # -> M = (see below)
+        # [x_d, y_d, z_d, r_31_d]' = M * J * q_d
+        # q_d = (M * J)^-1 * [x_d, y_d, z_d, r_31_d]'
+
+        T_g = self.fwd_kin(qA)
+        R_fg = T_g[frame_no][0:3,0:3]                  # Should it be {4} or {frame_no}?
+        M = np.array([[1, 0, 0, 0, 0, 0],
+                      [0, 1, 0, 0, 0, 0],
+                      [0, 0, 1, 0, 0, 0],
+                      [0, 0, 0, R_fg[1,0], -R_fg[0,0], 0]])
+        Xi = np.array([A['v'][0], A['v'][1], A['v'][2],np.cos(A['gamma'])*A['gamma_d']]).reshape(4,1)
+        J = self.jacobian(frame_no=frame_no,q=qA)
+        qA_d = np.linalg.inv(M @ J) @ Xi
+        qA_dd = [0,0,0,0]
+
+        T_g = self.fwd_kin(qB)
+        R_fg = T_g[frame_no][0:3,0:3]                  # Should it be {4} or {frame_no}?
+        M = np.array([[1, 0, 0, 0, 0, 0],
+                      [0, 1, 0, 0, 0, 0],
+                      [0, 0, 1, 0, 0, 0],
+                      [0, 0, 0, R_fg[1,0], -R_fg[0,0], 0]])
+        Xi = np.array([B['v'][0], B['v'][1], B['v'][2],np.cos(B['gamma'])*B['gamma_d']]).reshape(4,1)
+        J = self.jacobian(frame_no=frame_no,q=qB)
+        qB_d = np.linalg.inv(M @ J) @ Xi
+        qB_dd = [0,0,0,0]
+
+        # Calculate Polynomial for each joint
+
+        coeffs = []
+
+        for i in range(4):
+            coeffs.append(self.poly_interpol(A=[qA[i],qA_d[i].item(),qA_dd[i]],B=[qB[i],qB_d[i].item(),qB_dd[i]],tA=tA,tB=tB,order=order))
+
+        
+        # Return List of trajectory objects
+        return Trajectory(coeffs,tA,tB)
+    
+    def follow_traj(self,traj,Ts=0.1,tol=0.05):
+        """Arm follows `traj`   
+
+        Before the arm follows the desired trajectory,
+        the current arm configuration and inital trajectory arm
+        configuration must be within `tolerance` [rad]
+
+        @param traj: trajectory object
+        @param Ts: Sampling time of movement
+        @param tol: tolerance at inital conditions
+        """
+        outside_tol = False
+        for i, q_i in enumerate(self.get_cached_jointAngles()):
+            if abs(traj.q_0[i] - q_i) > tol:
+                outside_tol = True
+                print(f"Non-Continous Trajectory, linear movement to: {traj.q_0}")
+                break
+
+        self.set_speed([2.0]*4)
+        self.move_to_angles(traj.q_0)
+
+        start_time = time.time()
+        last_time = 0
+        # t = Ts
+        while True:
+            current_time = time.time()        
+            if (current_time - last_time > Ts):
+                t =  (current_time - start_time) + Ts
+                # print(f"{t:.3f}")
+                if t >= traj.tB:
+                    # print(f"Total: {current_time-start_time:.3f}") 
+                    break             
+                
+                try:
+                    q = traj.eval(t)
+                    q_d = traj.eval(t,diff = 1,Ts= Ts)
+                except Exception as e: print(e)
+                else:
+                    self.set_speed(q_d)
+                    self.move_to_angles(q,blocking=False)
+
+                last_time = current_time
+                # t += Ts
+                
+            self.twin.draw_arm()    
+            time.sleep(0.005)
 
     # Create "functions" for setting and moving motors:
     def enable_torque(self, motor_id):
@@ -339,26 +475,23 @@ class RobotArm():
                 return self.__PV_joint_angles[joint-1]
 
 
-    def move_to_angles(self, goal_positions):
+    def move_to_angles(self, goal_positions,blocking=True):
         # Move each motor to the target position specified in goal_positions
         for motor_id, goal_pos in zip(self.__DXL_IDS, goal_positions):
             self.set_joint_angle(motor_id, goal_pos)
 
-        # Wait until all motors reach their goal positions
-        for motor_id, goal_pos in zip(self.__DXL_IDS, goal_positions):
-            while True:
-                current_position = self.get_joint_angle(motor_id)
-                if current_position is None:
-                    break  # Exit if we failed to read the position
-                if abs(goal_pos - current_position) < self.__DXL_MOVING_STATUS_THRESHOLD:
-                    break  # Movement complete for this motor
-
-    #TODO: Fix this function
-
-    # def set_torque(self, enable=True):
-    #     for motor_id in self.__DXL_IDS:
-    #         result, error = self.__packetHandler.write1ByteTxRx(self)
-           
+        if blocking:
+            # Wait until all motors reach their goal positions
+            start = time.time()
+            for motor_id, goal_pos in zip(self.__DXL_IDS, goal_positions):
+                while True:
+                    # if time.time()-start > 10:
+                    #     raise ValueError("Timout: Movement took to long")
+                    current_position = self.get_joint_angle(motor_id)
+                    if current_position is None:
+                        break  # Exit if we failed to read the position
+                    if abs(goal_pos - current_position) < self.__DXL_MOVING_STATUS_THRESHOLD:
+                        break  # Movement complete for this motor
 
     def set_speed(self, speeds):
         #set_speed function for the robot arm class.
@@ -368,11 +501,16 @@ class RobotArm():
         #   speeds : a vector representing motor speeds for each motor
         #Outputs:
         #   None
+        speeds = [abs(item) for item in speeds]
        
         self.__motor_speeds = speeds
 
         for motor_id, speed in zip(self.__DXL_IDS, speeds):
-            assert (speed > 0.0117 and speed <= 11.9),"Movement speed out of range, enter value between ]0,1]"
+            # assert (speed > 0.0117 and speed <= 11.9),"Movement speed out of range, enter value between ]0,1]"
+            if speed < 0.0117:
+                speed = 0.0117
+            if speed > 11.9:
+                speed = 11.9
             if self.__has_hardware:
                 result, error = self.__packetHandler.write2ByteTxRx(self.__portHandler,motor_id, self.__ADDR_MX_MOVING_SPEED, int(self.radps_to_rot(speed)))
                 if result != dxl.COMM_SUCCESS:
@@ -474,13 +612,95 @@ class Frame:
                              [0, np.sin(self.alpha), np.cos(self.alpha), q],
                              [0, 0, 0, 1]])
         
+
+class Trajectory():
+    def __init__(self,coeffs,tA,tB):
+        
+        self.dim = len(coeffs)
+
+        self.tA = tA
+        self.tB = tB
+
+        self.coeffs = coeffs
+
+        self.q_0 = self.eval(tA)
+
+        
+        
+
+    def eval(self,t: float,diff = 0,Ts = None):
+        assert diff in [0, 1, 2], f"Derivative of order {diff} not supported"
+        
+        if Ts is not None:
+            assert Ts > 0, "Sample time must be Ts > 0"
+            assert diff == 1, f"Discrete Implementation for order {diff} not supported"
+            disc = True
+        else:
+            disc = False
+
+        
+        out = [0.0] * self.dim
+
+        if t < self.tA:
+            t = self.tA
+        if t > self.tB:
+            t = self.tB
+
+        for i in range(self.dim):
+            if self.coeffs[i].size == 2:
+                if diff == 0:
+                    out[i] = (np.array([[1, t]]) @ self.coeffs[i]).item()
+                elif diff == 1:
+                    if disc:
+                        dt = (Ts, -Ts) [t + Ts > self.tB]
+                        out[i] = ((np.array([[1, t+dt]]) @ self.coeffs[i]).item() - (np.array([[1, t]]) @ self.coeffs[i]).item())/dt
+                    else:
+                        out[i] = (np.array([[0, 1]]) @ self.coeffs[i]).item()
+                elif diff == 2:
+                    out[i] = 0.0          
+            
+            elif self.coeffs[i].size == 4:
+                if diff == 0:
+                    out[i] = (np.array([[1, t, t**2, t**3]]) @ self.coeffs[i]).item()
+                elif diff == 1:
+                    if disc:
+                        dt = (Ts, -Ts) [t + Ts > self.tB]
+                        out[i] = ((np.array([[1, t+dt, (t+dt)**2, (t+dt)**3]]) @ self.coeffs[i]).item() - (np.array([[1, t, t**2, t**3]]) @ self.coeffs[i]).item())/dt
+                    else:
+                        out[i] = (np.array([[0, 1, 2*t, 3*t**2]]) @ self.coeffs[i]).item()
+                elif diff == 2:
+                    out[i] = (np.array([[0, 0, 2, 6*t]]) @ self.coeffs[i]).item()
+
+            elif self.coeffs[i].size == 6:
+                if diff == 0:
+                    out[i] = (np.array([[1, t, t**2, t**3, t**4, t**5]]) @ self.coeffs[i]).item()
+                elif diff == 1:
+                    if disc:
+                        dt = (Ts, -Ts) [t + Ts > self.tB]
+                        out[i] = ((np.array([[1, (t+dt), (t+dt)**2, (t+dt)**3, (t+dt)**4, (t+dt)**5]]) @ self.coeffs[i]).item() - (np.array([[1, t, t**2, t**3, t**4, t**5]]) @ self.coeffs[i]).item())/dt
+                    else:
+                        out[i] = (np.array([[0, 1, 2*t, 3*t**2, 4*t**3, 5*t**4]]) @ self.coeffs[i]).item()
+                elif diff == 2:
+                    out[i] = (np.array([[0, 0, 2, 6*t, 12*t**2, 20*t**3]]) @ self.coeffs[i]).item()
+            else:
+                raise ValueError(f"Unsupported order {self.coeffs[i].len()-1}")
+            
+        return out
     
+    def plot(self):
+        # Create a figure with subplots
+        fig, axs = plt.subplots(self.dim, 1)
+        t_values = np.linspace(self.tA, self.tB, 100)  # Generate 100 points between tA and tB
 
+        for i in range(self.dim):
+            # Evaluate the polynomial for the current dimension
+            y_values = [sum(c * (t ** j) for j, c in enumerate(self.coeffs[i])) for t in t_values]
+            axs[i].plot(t_values, y_values, label=f'q')
+            axs[i].set_title(f'q_{i+1}')
+            axs[i].set_xlabel('Time (t)')
+            axs[i].set_ylabel('Value')
+            axs[i].grid()
+            # axs[i].legend()
 
-
-# how to include kinematics
-
-# try to copy the move_j function, use degree conversion like in myrobot
-# if that doesnt work, try to use chatgpt's method of mapping degrees
-# copy the function that checks if angle is within motor limits 
-
+        plt.tight_layout()
+        plt.show()
