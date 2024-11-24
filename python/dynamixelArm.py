@@ -318,7 +318,7 @@ class RobotArm():
         # Return List of trajectory objects
         return Trajectory(coeffs,tA,tB)
     
-    def follow_traj(self,traj,Ts=0.1,tol=0.05):
+    def follow_traj(self,traj, Ts=0.1, tol=0.05, DONE=None):
         """Arm follows `traj`   
 
         Before the arm follows the desired trajectory,
@@ -337,7 +337,11 @@ class RobotArm():
                 break
 
         self.set_speed([2.0]*4)
-        self.move_to_angles(traj.q_0)
+        thread, DONE_init = self.run_in_thread(self.move_to_angles,traj.q_0)
+        DONE_init.wait()
+        thread.join()
+
+        # input()
 
         start_time = time.time()
         last_time = 0
@@ -345,25 +349,40 @@ class RobotArm():
         while True:
             current_time = time.time()        
             if (current_time - last_time > Ts):
-                t =  (current_time - start_time) + Ts
-                # print(f"{t:.3f}")
-                if t >= traj.tB:
-                    # print(f"Total: {current_time-start_time:.3f}") 
-                    break             
+                t =  (current_time - start_time)
+                # print(f"{t:.3f}")           
                 
-                try:
-                    q = traj.eval(t)
-                    q_d = traj.eval(t,diff = 1,Ts= Ts)
-                except Exception as e: print(e)
-                else:
+                if t+Ts > traj.tB:
+                    q = traj.eval(traj.tB)
+                    q_d = traj.eval(traj.tB,diff = 1,Ts= traj.tB - t)
                     self.set_speed(q_d)
-                    self.move_to_angles(q,blocking=False)
+                    # q_diff = [(a_i - b_i) for a_i, b_i in zip(traj.eval(traj.tB), traj.eval(t))]
+                    # print(f"{q_diff}")
+                    # print(f"{q_d}")
+                    # print(f"{[(a_i / (b_i+0.0000000000001)) for a_i, b_i in zip(q_diff, q_d)]}")
+                    
+                    self.move_to_angles(q,blocking=True)
+                    print(f"Total: {time.time() - start_time:.3f}")
+                    
+
+                    break
+
+                else:
+                    
+                    q = traj.eval(t+Ts)
+                    q_d = traj.eval(t+Ts,diff = 1,Ts= Ts)
+                    self.set_speed(q_d)  
+                    self.move_to_angles(q,blocking=True)
+                    
 
                 last_time = current_time
-                # t += Ts
                 
-            self.twin.draw_arm()    
+            # self.twin.draw_arm()    
             time.sleep(0.005)
+
+        # Signal that the function has finished
+        if DONE is not None:
+            DONE.set()
 
     # Create "functions" for setting and moving motors:
     def enable_torque(self, motor_id):
@@ -475,16 +494,27 @@ class RobotArm():
                 return self.__PV_joint_angles[joint-1]
 
 
-    def move_to_angles(self, goal_positions,blocking=True):
+    def move_to_angles(self, goal_positions,blocking=True, DONE = None):
         # Move each motor to the target position specified in goal_positions
         for motor_id, goal_pos in zip(self.__DXL_IDS, goal_positions):
             self.set_joint_angle(motor_id, goal_pos)
 
         if blocking:
             # Wait until all motors reach their goal positions
+            # print("Moving joints:")
+            # q_diff = [float(a_i - b_i) for a_i, b_i in zip(goal_positions,self.get_cached_jointAngles())]
+            # ts = [(float(a_i / (b_i)) if b_i > 0 else 0) for a_i, b_i in zip(q_diff,self.__motor_speeds)]
+            # print(f"error: {q_diff}")
+            # print(f"time: {ts}")
+            # print(f"Should take max: {max(ts)}")
+                    
             start = time.time()
             for motor_id, goal_pos in zip(self.__DXL_IDS, goal_positions):
+                
                 while True:
+                    # print(f"SV: {self.__SV_joint_angles}")
+                    # print(f"PV: {[float(i) for i in self.__PV_joint_angles]}")
+                    # print(f"VE: {[float(i) for i in self.__motor_speeds]}")
                     # if time.time()-start > 10:
                     #     raise ValueError("Timout: Movement took to long")
                     current_position = self.get_joint_angle(motor_id)
@@ -492,6 +522,12 @@ class RobotArm():
                         break  # Exit if we failed to read the position
                     if abs(goal_pos - current_position) < self.__DXL_MOVING_STATUS_THRESHOLD:
                         break  # Movement complete for this motor
+
+                    time.sleep(0.005)
+            # print(f"took: {time.time()-start}")
+
+        if DONE is not None:
+            DONE.set()
 
     def set_speed(self, speeds):
         #set_speed function for the robot arm class.
@@ -515,9 +551,17 @@ class RobotArm():
                 result, error = self.__packetHandler.write2ByteTxRx(self.__portHandler,motor_id, self.__ADDR_MX_MOVING_SPEED, int(self.radps_to_rot(speed)))
                 if result != dxl.COMM_SUCCESS:
                     print(f"Failed to set speed for motor {motor_id}: {self.__packetHandler.getTxRxResult(result)}")
-        
+
+    def run_in_thread(self, target_function, *args, **kwargs):
+        """Runs a target function in a separate thread."""
+        DONE = threading.Event()
+        kwargs['DONE'] = DONE
+        thread = threading.Thread(target=target_function, args=args, kwargs=kwargs)
+        thread.start()
+        return thread, DONE  # Optionally return the thread object
+    
     def _move_joints(self):
-        gain = 30
+        gain = 100
         Ts = 0.01
         last = time.time()
         while self.__running:
@@ -537,15 +581,13 @@ class RobotArm():
                     # print(f"SV {i+1}: {SV[i]:.3f}, PV {i+1}: {PV[i]:.3f}, ",end='')
                     error = SV[i]-PV[i]
                     # print(f"error {i+1}: {error:.3f}, ",end='')
-                    dq = error*gain*Ts
+                    dq = error*gain*dt
                     
-                    if (abs(dq) > speeds[i]*Ts):
-                        dq = speeds[i]*Ts*np.sign(dq)
+                    if (abs(dq) > speeds[i]*dt):
+                        dq = speeds[i]*dt*np.sign(dq)
                                         
-                    # if abs(dq) <= np.deg2rad(1.0):
-                    #     dq = 0.0
-                    # print(f"dq {i+1}: {dq:.3f}, ",end='')
-                    
+                    # print(f"dq {i+1}: {dq:.4f}, ",end='')
+
                     PV[i] += dq
                 
                 # print("")
@@ -612,7 +654,6 @@ class Frame:
                              [0, np.sin(self.alpha), np.cos(self.alpha), q],
                              [0, 0, 0, 1]])
         
-
 class Trajectory():
     def __init__(self,coeffs,tA,tB):
         
@@ -632,19 +673,25 @@ class Trajectory():
         assert diff in [0, 1, 2], f"Derivative of order {diff} not supported"
         
         if Ts is not None:
-            assert Ts > 0, "Sample time must be Ts > 0"
+            assert Ts != 0, "Sample time must not be Ts = 0"
             assert diff == 1, f"Discrete Implementation for order {diff} not supported"
             disc = True
+            # Ts = min(Ts,abs(self.tB - (t-Ts)))
+            # print(f"Ts: {Ts}")
         else:
             disc = False
 
         
         out = [0.0] * self.dim
 
-        if t < self.tA:
-            t = self.tA
-        if t > self.tB:
-            t = self.tB
+        
+        
+
+        # t = max(t,self.tA)
+        # t = min(t,self.tB)
+
+        
+
 
         for i in range(self.dim):
             if self.coeffs[i].size == 2:
@@ -652,8 +699,7 @@ class Trajectory():
                     out[i] = (np.array([[1, t]]) @ self.coeffs[i]).item()
                 elif diff == 1:
                     if disc:
-                        dt = (Ts, -Ts) [t + Ts > self.tB]
-                        out[i] = ((np.array([[1, t+dt]]) @ self.coeffs[i]).item() - (np.array([[1, t]]) @ self.coeffs[i]).item())/dt
+                        out[i] = ((np.array([[1, t]]) @ self.coeffs[i]).item() - (np.array([[1, t-Ts]]) @ self.coeffs[i]).item())/Ts
                     else:
                         out[i] = (np.array([[0, 1]]) @ self.coeffs[i]).item()
                 elif diff == 2:
@@ -664,8 +710,7 @@ class Trajectory():
                     out[i] = (np.array([[1, t, t**2, t**3]]) @ self.coeffs[i]).item()
                 elif diff == 1:
                     if disc:
-                        dt = (Ts, -Ts) [t + Ts > self.tB]
-                        out[i] = ((np.array([[1, t+dt, (t+dt)**2, (t+dt)**3]]) @ self.coeffs[i]).item() - (np.array([[1, t, t**2, t**3]]) @ self.coeffs[i]).item())/dt
+                        out[i] = ((np.array([[1, t, (t)**2, (t)**3]]) @ self.coeffs[i]).item() - (np.array([[1, (t-Ts), (t-Ts)**2, (t-Ts)**3]]) @ self.coeffs[i]).item())/Ts
                     else:
                         out[i] = (np.array([[0, 1, 2*t, 3*t**2]]) @ self.coeffs[i]).item()
                 elif diff == 2:
@@ -676,15 +721,14 @@ class Trajectory():
                     out[i] = (np.array([[1, t, t**2, t**3, t**4, t**5]]) @ self.coeffs[i]).item()
                 elif diff == 1:
                     if disc:
-                        dt = (Ts, -Ts) [t + Ts > self.tB]
-                        out[i] = ((np.array([[1, (t+dt), (t+dt)**2, (t+dt)**3, (t+dt)**4, (t+dt)**5]]) @ self.coeffs[i]).item() - (np.array([[1, t, t**2, t**3, t**4, t**5]]) @ self.coeffs[i]).item())/dt
+                        out[i] = ((np.array([[1, (t), (t)**2, (t)**3, (t)**4, (t)**5]]) @ self.coeffs[i]).item() - (np.array([[1, (t-Ts), (t-Ts)**2, (t-Ts)**3, (t-Ts)**4, (t-Ts)**5]]) @ self.coeffs[i]).item())/Ts
                     else:
                         out[i] = (np.array([[0, 1, 2*t, 3*t**2, 4*t**3, 5*t**4]]) @ self.coeffs[i]).item()
                 elif diff == 2:
                     out[i] = (np.array([[0, 0, 2, 6*t, 12*t**2, 20*t**3]]) @ self.coeffs[i]).item()
             else:
                 raise ValueError(f"Unsupported order {self.coeffs[i].len()-1}")
-            
+           
         return out
     
     def plot(self):

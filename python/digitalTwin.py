@@ -99,5 +99,7 @@ class DigitalTwin():
         # self.__fig_jointSpace['fig'].canvas.draw()
         
     def close(self):
-        plt.close(self.__fig_3D['fig'])
-        plt.close(self.__fig_jointSpace['fig'])
+        if self.__fig_3D is not None:
+            plt.close(self.__fig_3D['fig'])
+        if self.__fig_jointSpace is not None:  
+            plt.close(self.__fig_jointSpace['fig'])
