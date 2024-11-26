@@ -25,11 +25,18 @@ class RobotArm():
         self.__ADDR_MX_GOAL_POSITION = 30
         self.__ADDR_MX_MOVING_SPEED = 32
         self.__ADDR_MX_PRESENT_POSITION = 36
+        self.__ADDR_MX_JOINT_LIMIT_CW = 6
+        self.__ADDR_MX_JOINT_LIMIT_CCW = 8
         self.__ADDR_MX_PUNCH = 48
         self.__TORQUE_ENABLE = 1
         self.__TORQUE_DISABLE = 0
         self.__DXL_MOVING_STATUS_THRESHOLD = 0.05  # [rad] Threshold for detecting movement completion
+        self.__DXL_MIN_SPEED = 0.0117 # 0.0117
         self.__DXL_IDS = [1, 2, 3, 4]  # Motor IDs
+        self.joint_limits = [[self.rot_to_rad(0),self.rot_to_rad(1023)],
+        [self.rot_to_rad(93),self.rot_to_rad(927)],
+        [self.rot_to_rad(0),self.rot_to_rad(1023)],
+        [self.rot_to_rad(500),self.rot_to_rad(1023)]]
 
         # Digital Twin
         self.twin = DigitalTwin(self)
@@ -65,7 +72,7 @@ class RobotArm():
             print(f"Failed to open port {device_name} and set baudrate")
             self.__has_hardware = False
             
-
+        self.set_jointLimits(self.joint_limits)
         self.set_speed(self.__motor_speeds)
         self.move_to_angles(self.__SV_joint_angles)
 
@@ -401,7 +408,7 @@ class RobotArm():
         for i, q_i in enumerate(self.get_cached_jointAngles()):
             if abs(traj.s_0[i] - q_i) > tol:
                 print(f"Non-Continous Trajectory, linear movement to: {traj.s_0}")
-                self.set_speed([2.0]*4)
+                self.set_speed([0.5]*4)
                 if traj.space == "task":
                     s_0 = self.inv_kin(gamma=traj.s_0[3],origin=traj.s_0[0:3],elbow=elbow,tool=tool)
                 elif traj.space == "joint":
@@ -410,8 +417,7 @@ class RobotArm():
                 DONE_init.wait()
                 thread.join()
                 break          
-
-
+        
 
         start_time = time.time()
         last_time = time.time()-Ts
@@ -420,7 +426,7 @@ class RobotArm():
             dt = current_time - last_time        
             if (dt >= Ts):
                 t =  (current_time - start_time)
-                print(f"{t:.3f}")   
+                # print(f"{t:.3f}")   
                 if t+Ts > traj.tB:                    
                     if traj.space == "task":
                         X = traj.eval(traj.tB) # next
@@ -614,10 +620,17 @@ class RobotArm():
                     current_position = self.get_joint_angle(motor_id)
                     if current_position is None:
                         break  # Exit if we failed to read the position
+                    print(f"ID: {motor_id}, error: {abs(goal_pos - current_position)}, VE: {self.__motor_speeds[motor_id-1]}")
+                    if abs(goal_pos - self.joint_limits[motor_id-1][0]) < self.__DXL_MOVING_STATUS_THRESHOLD:
+                        print(f"Position of joint {motor_id} at CW joint Limit")
+                        break
+                    if abs(goal_pos - self.joint_limits[motor_id-1][1]) < self.__DXL_MOVING_STATUS_THRESHOLD:
+                        print(f"Position of joint {motor_id} at CCW joint Limit")
+                        break
                     if abs(goal_pos - current_position) < self.__DXL_MOVING_STATUS_THRESHOLD:
                         break  # Movement complete for this motor
 
-                    time.sleep(0.005)
+                    time.sleep(0.05)
             # print(f"took: {time.time()-start}")
 
         if DONE is not None:
@@ -637,14 +650,30 @@ class RobotArm():
 
         for motor_id, speed in zip(self.__DXL_IDS, speeds):
             # assert (speed > 0.0117 and speed <= 11.9),"Movement speed out of range, enter value between ]0,1]"
-            if speed < 0.0117:
-                speed = 0.0117
+            if speed < self.__DXL_MIN_SPEED:
+                speed = self.__DXL_MIN_SPEED
             if speed > 11.9:
                 speed = 11.9
             if self.__has_hardware:
                 result, error = self.__packetHandler.write2ByteTxRx(self.__portHandler,motor_id, self.__ADDR_MX_MOVING_SPEED, int(self.radps_to_rot(speed)))
                 if result != dxl.COMM_SUCCESS:
                     print(f"Failed to set speed for motor {motor_id}: {self.__packetHandler.getTxRxResult(result)}")
+    
+    def set_jointLimits(self, limits):
+              
+        self.joint_limits = limits
+
+        for motor_id, limit in zip(self.__DXL_IDS, limits):
+            # assert (speed > 0.0117 and speed <= 11.9),"Movement speed out of range, enter value between ]0,1]"
+            
+            if self.__has_hardware:
+                result, error = self.__packetHandler.write2ByteTxRx(self.__portHandler,motor_id, self.__ADDR_MX_JOINT_LIMIT_CW, int(self.rad_to_rot(limit[0])))
+                if result != dxl.COMM_SUCCESS:
+                    print(f"Failed to set limit for motor {motor_id}: {self.__packetHandler.getTxRxResult(result)}")
+                
+                result, error = self.__packetHandler.write2ByteTxRx(self.__portHandler,motor_id, self.__ADDR_MX_JOINT_LIMIT_CCW, int(self.rad_to_rot(limit[1])))
+                if result != dxl.COMM_SUCCESS:
+                    print(f"Failed to set limit for motor {motor_id}: {self.__packetHandler.getTxRxResult(result)}")
 
     def run_in_thread(self, target_function, *args, **kwargs):
         """Runs a target function in a separate thread."""

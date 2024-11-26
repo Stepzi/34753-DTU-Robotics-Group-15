@@ -3,7 +3,7 @@ import numpy as np
 from dynamixelArm import RobotArm 
 
 def main():
-    arm = RobotArm(device_name="/dev/ttyACM0",end_effector="straight")
+    arm = RobotArm(device_name="/dev/ttyACM0",end_effector="angled")
     sampling_period = 1  # Frequency in seconds (1Hz = 1 second between updates)
     last_time =  0
     start_time = time.time()
@@ -12,12 +12,12 @@ def main():
 
     t1 = arm.joint_polyTraj(frame_no=5, 
                           A={'gamma': 0, 'origin': [0,0.15,0.15], 'elbow':"up", 'v': [0,0,0], 'gamma_d': 0},
-                          B={'gamma': np.deg2rad(90), 'origin': [0,0.1,0.2], 'elbow':"up", 'v': [0,0,0], 'gamma_d': 0},
+                          B={'gamma': -np.deg2rad(30), 'origin': [0,0.1,0.2], 'elbow':"up", 'v': [0,0,0], 'gamma_d': 0},
                           tA = 0,
                           tB = 3,
                           order = 1)
     t2 = arm.joint_polyTraj(frame_no=5, 
-                          A={'gamma': np.deg2rad(90), 'origin': [0,0.1,0.2], 'elbow':"up", 'v': [0,0,0], 'gamma_d': 0},
+                          A={'gamma': -np.deg2rad(30), 'origin': [0,0.1,0.2], 'elbow':"up", 'v': [0,0,0], 'gamma_d': 0},
                           B={'gamma': 0, 'origin': [0,0.15,0.15], 'elbow':"up", 'v': [0,0,0], 'gamma_d': 0},
                           tA = 0,
                           tB = 5,
