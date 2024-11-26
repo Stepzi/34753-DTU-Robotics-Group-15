@@ -204,7 +204,7 @@ if __name__ == "__main__":
 	# (2,2) is the bottom right corner of the tictactoe grid
 
 	# translate "the best move" into global coordinates for next point
-	nextpoint = tictacrobot.translateMove(bestMove)
+	nextpoint = tictacrobot.translateMove(bestMove,cellWidth=0.05)
 	print("The next point is: ", nextpoint)
 
 	# send the point to inverse kinematics...
