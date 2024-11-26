@@ -6,6 +6,11 @@
 
 class tttAI():
 	def __init__(self,player=True,opponent=False):
+		self.board = [ 
+			[ None, None, None ], 
+			[ None, None, None ], 
+			[ None, None, None ] 
+		] 
 		if player:
 			self.player=True
 			self.opponent=False
@@ -127,7 +132,7 @@ class tttAI():
 						board[i][j] = None
 			return best 
 
-	def findBestMove(self, board) : 
+	def findBestMove(self) : 
 		# returns the best possible move for the player (in this case the robot)
 		bestVal = -1000
 		bestMove = (-1, -1) 
@@ -139,17 +144,17 @@ class tttAI():
 			for j in range(3) : 
 			
 				# Check if cell is empty 
-				if (board[i][j] == None) : 
+				if (self.board[i][j] == None) : 
 				
 					# Make the move 
-					board[i][j] = True 
+					self.board[i][j] = True 
 
 					# compute evaluation function for this 
 					# move. 
-					moveVal = self.minimax(board, 0, False) 
+					moveVal = self.minimax(self.board, 0, False) 
 
 					# Undo the move 
-					board[i][j] = None
+					self.board[i][j] = None
 
 					# If the value of the current move is 
 					# more than the best value, then update 
@@ -185,29 +190,36 @@ class tttAI():
 
 
 if __name__ == "__main__":
-	
+	# create object
 	tictacrobot = tttAI()
+	# initally, the board is empty everywhere
 
-	# simulate that the cv functions compute the following board layout:
-	# x is True, o is False, and empty is None
-	board = [ 
+	# we call the find best move, based on the current board
+	bestMove = tictacrobot.findBestMove() 
+	print("The Optimal Move is :") 
+	print("ROW:", bestMove[0], " COL:", bestMove[1]) # (0,0) is top-left cell of grid
+	# translate "the best move" into global coordinates for next point
+	nextpoint = tictacrobot.translateMove(bestMove,cellWidth=0.05)
+	print("The next point is: ", nextpoint)
+
+	# the board is now updated using our advanced computer vision:
+	print()
+	print("**Simulated update of the board**")
+	print()
+	tictacrobot.board = [ 
 		[ True, False, True ], 
 		[ False, False, True ], 
 		[ None, None, None ] 
 	] 
 
-	# we call the find best move, based on the current board
-	bestMove = tictacrobot.findBestMove(board) 
-
+	# The next move is calculated:
+	bestMove = tictacrobot.findBestMove() 
 	print("The Optimal Move is :") 
-	print("ROW:", bestMove[0], " COL:", bestMove[1]) 
-	# (2,2) is the bottom right corner of the tictactoe grid
-
-	# translate "the best move" into global coordinates for next point
+	print("ROW:", bestMove[0], " COL:", bestMove[1])
 	nextpoint = tictacrobot.translateMove(bestMove,cellWidth=0.05)
 	print("The next point is: ", nextpoint)
 
-	# send the point to inverse kinematics...
+	# after "nextpoint" has been calculated, we send it to the inverse kinematic function...
 
 
 
