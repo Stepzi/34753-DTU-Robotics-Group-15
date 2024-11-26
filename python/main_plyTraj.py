@@ -9,27 +9,26 @@ def main():
     start_time = time.time()
     
     
-    arm.set_speed([2.0]*4)
 
-    t1 = arm.poly_traj(frame_no=4, 
+    t1 = arm.joint_polyTraj(frame_no=5, 
                           A={'gamma': 0, 'origin': [0,0.15,0.15], 'elbow':"up", 'v': [0,0,0], 'gamma_d': 0},
                           B={'gamma': np.deg2rad(90), 'origin': [0,0.1,0.2], 'elbow':"up", 'v': [0,0,0], 'gamma_d': 0},
                           tA = 0,
                           tB = 3,
-                          order = 5)
-    t2 = arm.poly_traj(frame_no=4, 
+                          order = 1)
+    t2 = arm.joint_polyTraj(frame_no=5, 
                           A={'gamma': np.deg2rad(90), 'origin': [0,0.1,0.2], 'elbow':"up", 'v': [0,0,0], 'gamma_d': 0},
                           B={'gamma': 0, 'origin': [0,0.15,0.15], 'elbow':"up", 'v': [0,0,0], 'gamma_d': 0},
                           tA = 0,
                           tB = 5,
                           order = 5)
-    t3 = arm.poly_traj(frame_no=4, 
+    t3 = arm.joint_polyTraj(frame_no=5, 
                           A={'gamma': 0, 'origin': [0,0.15,0.15], 'elbow':"up", 'v': [0,0,0], 'gamma_d': 0},
                           B={'gamma': 0, 'origin': [0,0.15,0.05], 'elbow':"up", 'v': [0,0,0], 'gamma_d': 0},
                           tA = 0,
                           tB = 5,
                           order = 5)
-    t4 = arm.poly_traj(frame_no=4, 
+    t4 = arm.joint_polyTraj(frame_no=5, 
                           A={'gamma': 0, 'origin': [0,0.15,0.05], 'elbow':"up", 'v': [0,0,0], 'gamma_d': 0},
                           B={'gamma': 0, 'origin': [0,0.15,0.15], 'elbow':"up", 'v': [0,0,0], 'gamma_d': 0},
                           tA = 0,
@@ -52,8 +51,8 @@ def main():
         
             i = (i+1)%len(traj)
             
-            # print("hit enter for next move")
-            # inp = input()
+            print("hit enter for next move")
+            inp = input()
                          
             time.sleep(0.005)
             

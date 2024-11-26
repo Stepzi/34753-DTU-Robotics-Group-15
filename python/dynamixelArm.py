@@ -159,8 +159,9 @@ class RobotArm():
             x_4z = T_40[2,0]
             tip_0 = T_40[0:3,3]
 
-
-            gamma = np.arctan2(x_4z,np.sqrt(1-x_4z**2))
+            gamma = np.arccos(T_40[0,0]/np.cos(q1))*np.sign(T_40[2,0])
+            gamma = gamma.item()
+            # gamma = np.arctan2(x_4z,np.sqrt(1-x_4z**2))
 
         else:
             tip_g = np.array(origin,dtype=float).reshape(3,1)  # make numpy vector
@@ -229,7 +230,7 @@ class RobotArm():
 
     
     def poly_interpol(self,A: list,B:list,tA,tB,order = 5):
-        assert (order in [5]), f"Order {order} is not supported"
+        assert (order in [1,3,5]), f"Order {order} is not supported"
         assert (len(A) == (order+1)/2 and len(B) == (order+1)/2), "Missing boundary conditions for selected order"
         
         boundary_cond = A.copy()        
@@ -237,18 +238,74 @@ class RobotArm():
 
         boundary_cond = np.array(boundary_cond).reshape(order+1,1)
 
-        T = np.array([[1,tA,tA**2,tA**3,tA**4,tA**5],
-                      [0,1,2*tA,3*tA**2,4*tA**3,5*tA**4],
-                      [0,0,2,6*tA,12*tA**2,20*tA**3],
-                      [1,tB,tB**2,tB**3,tB**4,tB**5],
-                      [0,1,2*tB,3*tB**2,4*tB**3,5*tB**4],
-                      [0,0,2,6*tB,12*tB**2,20*tB**3]])
+        if order == 1:
+            T = np.array([[1,tA],
+                        [1,tB]])
+        elif order == 3:
+            T = np.array([[1,tA,tA**2,tA**3],
+                        [0,1,2*tA,3*tA**2],
+                        [1,tB,tB**2,tB**3],
+                        [0,1,2*tB,3*tB**2]])
+        elif order == 5:
+            T = np.array([[1,tA,tA**2,tA**3,tA**4,tA**5],
+                        [0,1,2*tA,3*tA**2,4*tA**3,5*tA**4],
+                        [0,0,2,6*tA,12*tA**2,20*tA**3],
+                        [1,tB,tB**2,tB**3,tB**4,tB**5],
+                        [0,1,2*tB,3*tB**2,4*tB**3,5*tB**4],
+                        [0,0,2,6*tB,12*tB**2,20*tB**3]])
         
 
         return np.linalg.inv(T) @ boundary_cond
 
-    def poly_traj(self,frame_no,A: dict,B: dict,tA,tB,order):
-        """Smoothly interpolates between two configurations A and B       
+    def task_polyTraj(self,A: dict,B: dict,T,order,elbow="up"):
+        """Creates a straight-line trajectory in the task space between configurations `A` and `B`       
+        
+        The configuration Dicts contain the following key-value pairs:
+        {'gamma': gamma [rad],'origin': [x,y,z] in {g}, 'elbow':"up"/"down",
+          'v': scalar [m/s], 'a': scalar [m/^2]}
+
+        @param A: dict of configuration at time tA
+        @param B: dict of configuration at time tB
+        @param T: Trajectory Duration
+        @param order: order of polynomial
+        @returns: Trajectory Object in joint space
+        """
+
+        if order == 1:
+            s = self.poly_interpol(A=[0],B=[1],tA=0,tB=T,order=order)
+        elif order == 3:
+            s = self.poly_interpol(A=[0,A['v']],B=[1,B['v']],tA=0,tB=T,order=order)
+        elif order == 5:
+            s = self.poly_interpol(A=[0,A['v'],A['a']],B=[1,B['v'],B['a']],tA=0,tB=T,order=order)
+
+        cA = A['origin'].copy()
+        cA.append(A['gamma'])
+        cA = np.array(cA).reshape(4,1)
+
+        cB = B['origin'].copy()
+        cB.append(B['gamma'])
+        cB = np.array(cB).reshape(4,1)
+
+        dc = cB-cA
+
+         # Calculate Polynomial for each joint
+        coeffs = []
+        if order == 1:
+            for i in range(4):
+                coeffs.append(np.array([cA[i]+s[0]*dc[i],s[1]*dc[i]]).reshape(order+1,1))
+        elif order == 3:
+            for i in range(4):
+                coeffs.append(np.array([cA[i]+s[0]*dc[i],s[1]*dc[i],s[2]*dc[i],s[3]*dc[i]]).reshape(order+1,1))
+        elif order == 5:
+            for i in range(4):
+                coeffs.append(np.array([cA[i]+s[0]*dc[i],s[1]*dc[i],s[2]*dc[i],s[3]*dc[i],s[4]*dc[i],s[5]*dc[i]]).reshape(order+1,1))
+        # Return Trajectory object in joint space
+        return Trajectory(coeffs,0,T,space="task")
+
+
+
+    def joint_polyTraj(self,frame_no,A: dict,B: dict,tA,tB,order):
+        """Creates a trajectory for the frame `frame_no` in the joint space between configurations `A` and `B`       
         
         The configuration Dicts contain the following key-value pairs:
         {'gamma': gamma [rad],'origin': [x,y,z] in {g}, 'elbow':"up"/"down",
@@ -260,7 +317,7 @@ class RobotArm():
         @param tA: time tA
         @param tB: time tB
         @param order: order of polynomial
-        @returns: Trajectory Object
+        @returns: Trajectory Object in joint space
         """
         assert frame_no > 3, "Cant compute inverse Kinematics for non-endeffecor Links"
         
@@ -271,113 +328,150 @@ class RobotArm():
         qA = self.inv_kin(A['gamma'],A['origin'],elbow=A['elbow'],tool=tool)
         qB = self.inv_kin(B['gamma'],B['origin'],elbow=B['elbow'],tool=tool)
 
+        if order >= 3:
+            # Assume velocity in {g} and gamma_d is given. 
+            # Compute remaining:
 
-        # Assume velocity in {g} and gamma_d is given. 
-        # Compute remaining:
+            # normally: [x_d, y_d, z_d, w_x, w_y, w_z]' = J * q_d
+            # to find inverse use pinv. But we dont know w_x, w_y, w_z but instead gamma_d
+            # r_31 = sin(gamma) -> r_31_d = cos(gamma)*gamma_d
+            # we want to find the matrix M that reduces the Jacobian to 4x4
+            # we know (skew symmetric Matrix) R_d[0:3,2] = R_yx*w_x - R_xx*w_y = r_31_d = cos(gamma)*gamma_d
+            # [x_d, y_d, z_d, r_31_d]' = M * [x_d, y_d, z_d, w_x, w_y, w_z]'
+            # -> M = (see below)
+            # [x_d, y_d, z_d, r_31_d]' = M * J * q_d
+            # q_d = (M * J)^-1 * [x_d, y_d, z_d, r_31_d]'
 
-        # normally: [x_d, y_d, z_d, w_x, w_y, w_z]' = J * q_d
-        # to find inverse use pinv. But we dont know w_x, w_y, w_z but instead gamma_d
-        # r_31 = sin(gamma) -> r_31_d = cos(gamma)*gamma_d
-        # we want to find the matrix M that reduces the Jacobian to 4x4
-        # we know (skew symmetric Matrix) R_d[0:3,2] = R_yx*w_x - R_xx*w_y = r_31_d = cos(gamma)*gamma_d
-        # [x_d, y_d, z_d, r_31_d]' = M * [x_d, y_d, z_d, w_x, w_y, w_z]'
-        # -> M = (see below)
-        # [x_d, y_d, z_d, r_31_d]' = M * J * q_d
-        # q_d = (M * J)^-1 * [x_d, y_d, z_d, r_31_d]'
+            T_g = self.fwd_kin(qA)
+            R_fg = T_g[frame_no][0:3,0:3]                  # Should it be {4} or {frame_no}?
+            M = np.array([[1, 0, 0, 0, 0, 0],
+                        [0, 1, 0, 0, 0, 0],
+                        [0, 0, 1, 0, 0, 0],
+                        [0, 0, 0, R_fg[1,0], -R_fg[0,0], 0]])
+            Xi = np.array([A['v'][0], A['v'][1], A['v'][2],np.cos(A['gamma'])*A['gamma_d']]).reshape(4,1)
+            J = self.jacobian(frame_no=frame_no,q=qA)
+            qA_d = np.linalg.inv(M @ J) @ Xi
+            qA_dd = [0,0,0,0]
 
-        T_g = self.fwd_kin(qA)
-        R_fg = T_g[frame_no][0:3,0:3]                  # Should it be {4} or {frame_no}?
-        M = np.array([[1, 0, 0, 0, 0, 0],
-                      [0, 1, 0, 0, 0, 0],
-                      [0, 0, 1, 0, 0, 0],
-                      [0, 0, 0, R_fg[1,0], -R_fg[0,0], 0]])
-        Xi = np.array([A['v'][0], A['v'][1], A['v'][2],np.cos(A['gamma'])*A['gamma_d']]).reshape(4,1)
-        J = self.jacobian(frame_no=frame_no,q=qA)
-        qA_d = np.linalg.inv(M @ J) @ Xi
-        qA_dd = [0,0,0,0]
-
-        T_g = self.fwd_kin(qB)
-        R_fg = T_g[frame_no][0:3,0:3]                  # Should it be {4} or {frame_no}?
-        M = np.array([[1, 0, 0, 0, 0, 0],
-                      [0, 1, 0, 0, 0, 0],
-                      [0, 0, 1, 0, 0, 0],
-                      [0, 0, 0, R_fg[1,0], -R_fg[0,0], 0]])
-        Xi = np.array([B['v'][0], B['v'][1], B['v'][2],np.cos(B['gamma'])*B['gamma_d']]).reshape(4,1)
-        J = self.jacobian(frame_no=frame_no,q=qB)
-        qB_d = np.linalg.inv(M @ J) @ Xi
-        qB_dd = [0,0,0,0]
+            T_g = self.fwd_kin(qB)
+            R_fg = T_g[frame_no][0:3,0:3]                  # Should it be {4} or {frame_no}?
+            M = np.array([[1, 0, 0, 0, 0, 0],
+                        [0, 1, 0, 0, 0, 0],
+                        [0, 0, 1, 0, 0, 0],
+                        [0, 0, 0, R_fg[1,0], -R_fg[0,0], 0]])
+            Xi = np.array([B['v'][0], B['v'][1], B['v'][2],np.cos(B['gamma'])*B['gamma_d']]).reshape(4,1)
+            J = self.jacobian(frame_no=frame_no,q=qB)
+            qB_d = np.linalg.inv(M @ J) @ Xi
+            qB_dd = [0,0,0,0]
 
         # Calculate Polynomial for each joint
-
         coeffs = []
-
-        for i in range(4):
-            coeffs.append(self.poly_interpol(A=[qA[i],qA_d[i].item(),qA_dd[i]],B=[qB[i],qB_d[i].item(),qB_dd[i]],tA=tA,tB=tB,order=order))
+        if order == 1:
+            for i in range(4):
+                coeffs.append(self.poly_interpol(A=[qA[i]],B=[qB[i]],tA=tA,tB=tB,order=order))
+        elif order == 3:
+            for i in range(4):
+                coeffs.append(self.poly_interpol(A=[qA[i],qA_d[i].item()],B=[qB[i],qB_d[i].item()],tA=tA,tB=tB,order=order))
+        elif order == 5:
+            for i in range(4):
+                coeffs.append(self.poly_interpol(A=[qA[i],qA_d[i].item(),qA_dd[i]],B=[qB[i],qB_d[i].item(),qB_dd[i]],tA=tA,tB=tB,order=order))
 
         
-        # Return List of trajectory objects
+        # Return Trajectory object in joint space
         return Trajectory(coeffs,tA,tB)
     
-    def follow_traj(self,traj, Ts=0.1, tol=0.05, DONE=None):
+    def follow_traj(self,traj, Ts=0.1, tol=0.05, frame_no=4, elbow="up", DONE=None):
         """Arm follows `traj`   
 
         Before the arm follows the desired trajectory,
         the current arm configuration and inital trajectory arm
-        configuration must be within `tolerance` [rad]
+        configuration must be within `tolerance` [rad].
+        If the provided trajectory is in task space, the frame number and elbow configuration can be provided.
 
         @param traj: trajectory object
         @param Ts: Sampling time of movement
         @param tol: tolerance at inital conditions
         """
-        outside_tol = False
+
+        assert traj.space in["joint","task"], "Trajectory must be in joint or task space"
+        tool = None
+        if traj.space == "task" and frame_no > 4:
+            tool = self.Frames[frame_no].T_local()
+
         for i, q_i in enumerate(self.get_cached_jointAngles()):
-            if abs(traj.q_0[i] - q_i) > tol:
-                outside_tol = True
-                print(f"Non-Continous Trajectory, linear movement to: {traj.q_0}")
-                break
+            if abs(traj.s_0[i] - q_i) > tol:
+                print(f"Non-Continous Trajectory, linear movement to: {traj.s_0}")
+                self.set_speed([2.0]*4)
+                if traj.space == "task":
+                    s_0 = self.inv_kin(gamma=traj.s_0[3],origin=traj.s_0[0:3],elbow=elbow,tool=tool)
+                elif traj.space == "joint":
+                    s_0 = traj.s_0
+                thread, DONE_init = self.run_in_thread(self.move_to_angles,s_0)
+                DONE_init.wait()
+                thread.join()
+                break          
 
-        self.set_speed([2.0]*4)
-        thread, DONE_init = self.run_in_thread(self.move_to_angles,traj.q_0)
-        DONE_init.wait()
-        thread.join()
 
-        # input()
 
         start_time = time.time()
-        last_time = 0
-        # t = Ts
+        last_time = time.time()-Ts
         while True:
-            current_time = time.time()        
-            if (current_time - last_time > Ts):
+            current_time = time.time()
+            dt = current_time - last_time        
+            if (dt >= Ts):
                 t =  (current_time - start_time)
-                # print(f"{t:.3f}")           
-                
-                if t+Ts > traj.tB:
-                    q = traj.eval(traj.tB)
-                    q_d = traj.eval(traj.tB,diff = 1,Ts= traj.tB - t)
-                    self.set_speed(q_d)
-                    # q_diff = [(a_i - b_i) for a_i, b_i in zip(traj.eval(traj.tB), traj.eval(t))]
-                    # print(f"{q_diff}")
-                    # print(f"{q_d}")
-                    # print(f"{[(a_i / (b_i+0.0000000000001)) for a_i, b_i in zip(q_diff, q_d)]}")
+                print(f"{t:.3f}")   
+                if t+Ts > traj.tB:                    
+                    if traj.space == "task":
+                        X = traj.eval(traj.tB) # next
+                        X_1 = traj.eval(t)     # current
+                        print(f"X: {X}")
+                        print(f"X_1: {X_1}")             
+                        q = self.inv_kin(gamma=X[3],origin=X[0:3],elbow=elbow,tool=tool)
+                        q_1 = self.inv_kin(gamma=X_1[3],origin=X_1[0:3],elbow=elbow,tool=tool)
+                        print(f"q: {q}")
+                        print(f"q_1: {q_1}")  
+                        print(f"dt: {dt}")
+                        print(f"q_diff: {[(a_i - b_i) for a_i, b_i in zip(q,q_1)]}")            
+                        
+                        q_d = [(a_i - b_i)/(traj.tB-t) for a_i, b_i in zip(q,q_1)]
+                        
+                        
+                    elif traj.space == "joint": 
+                        q = traj.eval(traj.tB)
+                        q_d = traj.eval(traj.tB,diff = 1,Ts= traj.tB - t)
                     
+                    print(f"q_d: {q_d}")
+                    self.set_speed(q_d)
                     self.move_to_angles(q,blocking=True)
                     print(f"Total: {time.time() - start_time:.3f}")
                     
-
                     break
 
                 else:
+                    if traj.space == "task":
+                        X = traj.eval(t+Ts) # next
+                        X_1 = traj.eval(t)     # current   
+                        print(f"X: {X}")
+                        print(f"X_1: {X_1}")             
+                        q = self.inv_kin(gamma=X[3],origin=X[0:3],elbow=elbow,tool=tool)
+                        q_1 = self.inv_kin(gamma=X_1[3],origin=X_1[0:3],elbow=elbow,tool=tool)
+                        print(f"q: {q}")
+                        print(f"q_1: {q_1}")  
+                        print(f"dt: {dt}")
+                        print(f"q_diff: {[(a_i - b_i) for a_i, b_i in zip(q,q_1)]}")      
+                        q_d = [(a_i - b_i)/Ts for a_i, b_i in zip(q,q_1)]
+
+                    elif traj.space == "joint": 
+                        q = traj.eval(t+Ts)
+                        q_d = traj.eval(t+Ts,diff = 1,Ts= dt) # TODO: dt instead of TS?
                     
-                    q = traj.eval(t+Ts)
-                    q_d = traj.eval(t+Ts,diff = 1,Ts= Ts)
+                    print(f"q_d: {q_d}")
                     self.set_speed(q_d)  
-                    self.move_to_angles(q,blocking=True)
-                    
+                    self.move_to_angles(q,blocking=False)
 
                 last_time = current_time
                 
-            # self.twin.draw_arm()    
             time.sleep(0.005)
 
         # Signal that the function has finished
@@ -655,16 +749,16 @@ class Frame:
                              [0, 0, 0, 1]])
         
 class Trajectory():
-    def __init__(self,coeffs,tA,tB):
+    def __init__(self,coeffs,tA,tB,space= "joint"):
         
         self.dim = len(coeffs)
-
+        self.space = space
         self.tA = tA
         self.tB = tB
 
         self.coeffs = coeffs
 
-        self.q_0 = self.eval(tA)
+        self.s_0 = self.eval(tA)
 
         
         
@@ -676,21 +770,12 @@ class Trajectory():
             assert Ts != 0, "Sample time must not be Ts = 0"
             assert diff == 1, f"Discrete Implementation for order {diff} not supported"
             disc = True
-            # Ts = min(Ts,abs(self.tB - (t-Ts)))
-            # print(f"Ts: {Ts}")
         else:
             disc = False
 
         
         out = [0.0] * self.dim
 
-        
-        
-
-        # t = max(t,self.tA)
-        # t = min(t,self.tB)
-
-        
 
 
         for i in range(self.dim):
