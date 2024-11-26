@@ -165,6 +165,7 @@ class tttAI():
 		print("The value of the best Move is :", bestVal) 
 		print() 
 		"""
+		
 		return bestMove 
 	
 	def translateMove(self, move):
@@ -218,6 +219,9 @@ if __name__ == "__main__":
 	print("The next point is: ", nextpoint)
 
 	# after "nextpoint" has been calculated, we send it to the inverse kinematic function...
+
+	# we could use the "bestval" variable to check if game is won by someone or is a draw (see documentation)
+	# but for now it's not used.
 
 
 
