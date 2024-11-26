@@ -5,18 +5,16 @@
 # https://www.geeksforgeeks.org/finding-optimal-move-in-tic-tac-toe-using-minimax-algorithm-in-game-theory/
 
 class tttAI():
-	def __init__(self,player=True,opponent=False):
+	def __init__(self, cellWidth = 0.05, topleft = [0.0,0.0,0.0]):
+		# adjust the cell width to the grid cell width/height in meters
 		self.board = [ 
 			[ None, None, None ], 
 			[ None, None, None ], 
 			[ None, None, None ] 
-		] 
-		if player:
-			self.player=True
-			self.opponent=False
-		elif opponent:
-			self.player=False
-			self.opponent=True
+		]
+		self.cellWidth = cellWidth
+		self.topleft = topleft
+
 
 	def isMovesLeft(self, board) : 
 		# returns true if there are moves remaining on the board
@@ -169,7 +167,7 @@ class tttAI():
 		"""
 		return bestMove 
 	
-	def translateMove(self, move, cellWidth = 0.05, topleft = [0.0,0.0,0.0]):
+	def translateMove(self, move):
 		"""
     	translate next move from (row,col) to (x,y,z) coordinates
 
@@ -179,9 +177,9 @@ class tttAI():
     	:return: returns 3d coordinates [x,y,z]
     	""" 
 		
-		x = topleft[0] + cellWidth*(move[0]) + 0.5*cellWidth
-		y = topleft[1] - cellWidth*(move[1]) - 0.5*cellWidth
-		z = topleft[2]
+		x = self.topleft[0] + self.cellWidth*(move[0]) + 0.5*self.cellWidth
+		y = self.topleft[1] - self.cellWidth*(move[1]) - 0.5*self.cellWidth
+		z = self.topleft[2]
 		point3d = [x, y, z]
 
 		return point3d
@@ -199,7 +197,7 @@ if __name__ == "__main__":
 	print("The Optimal Move is :") 
 	print("ROW:", bestMove[0], " COL:", bestMove[1]) # (0,0) is top-left cell of grid
 	# translate "the best move" into global coordinates for next point
-	nextpoint = tictacrobot.translateMove(bestMove,cellWidth=0.05)
+	nextpoint = tictacrobot.translateMove(bestMove)
 	print("The next point is: ", nextpoint)
 
 	# the board is now updated using our advanced computer vision:
@@ -216,7 +214,7 @@ if __name__ == "__main__":
 	bestMove = tictacrobot.findBestMove() 
 	print("The Optimal Move is :") 
 	print("ROW:", bestMove[0], " COL:", bestMove[1])
-	nextpoint = tictacrobot.translateMove(bestMove,cellWidth=0.05)
+	nextpoint = tictacrobot.translateMove(bestMove)
 	print("The next point is: ", nextpoint)
 
 	# after "nextpoint" has been calculated, we send it to the inverse kinematic function...
