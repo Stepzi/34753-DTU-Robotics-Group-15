@@ -644,7 +644,6 @@ class RobotArm():
         #   speeds : a vector representing motor speeds for each motor
         #Outputs:
         #   None
-        speeds = [abs(item) for item in speeds]
        
         self.__motor_speeds = speeds
 
@@ -655,7 +654,7 @@ class RobotArm():
             if speed > 11.9:
                 speed = 11.9
             if self.__has_hardware:
-                result, error = self.__packetHandler.write2ByteTxRx(self.__portHandler,motor_id, self.__ADDR_MX_MOVING_SPEED, int(self.radps_to_rot(speed)))
+                result, error = self.__packetHandler.write2ByteTxRx(self.__portHandler,motor_id, self.__ADDR_MX_MOVING_SPEED, int(self.radps_to_rot(abs(speed))))
                 if result != dxl.COMM_SUCCESS:
                     print(f"Failed to set speed for motor {motor_id}: {self.__packetHandler.getTxRxResult(result)}")
     
