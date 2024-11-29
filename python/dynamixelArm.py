@@ -1,5 +1,6 @@
 import numpy as np
 from digitalTwin import DigitalTwin 
+from patterns import Patterns 
 import threading
 import time
 import matplotlib.pyplot as plt
@@ -31,7 +32,7 @@ class RobotArm():
         self.__TORQUE_ENABLE = 1
         self.__TORQUE_DISABLE = 0
         self.__DXL_MOVING_STATUS_THRESHOLD = 0.05  # [rad] Threshold for detecting movement completion
-        self.__DXL_MIN_SPEED = 0.0117 # 0.0117
+        self.__DXL_MIN_SPEED = 0.2 # 0.0117
         self.__DXL_IDS = [1, 2, 3, 4]  # Motor IDs
         if end_effector == "angled":
             self.joint_limits = [[self.rot_to_rad(0),self.rot_to_rad(1023)],
@@ -46,6 +47,9 @@ class RobotArm():
 
         # Digital Twin
         self.twin = DigitalTwin(self)
+
+        # Patterns
+        self.patterns = Patterns(self)
 
         # Setup Multithreading:
         self.__lock = threading.Lock()
@@ -87,17 +91,17 @@ class RobotArm():
         # Base Frame
         frames.append(Frame(T=np.array([[1, 0, 0, 0],
                                         [0, 1, 0, 0],
-                                        [0, 0, 1, 0.05],
+                                        [0, 0, 1, 0.045],
                                         [0, 0, 0, 1]])))
         # Link 1          
-        frames.append(Frame(DH_params={'theta': 0,      'd':0.04,   'a': 0,     'alpha': np.pi/2,   'type': "revolute"}))
+        frames.append(Frame(DH_params={'theta': 0,      'd':0.046,   'a': 0,     'alpha': np.pi/2,   'type': "revolute"}))
         # Link 2
         frames.append(Frame(DH_params={'theta': np.pi/2,'d':0,      'a': 0.093, 'alpha': 0,         'type': "revolute"}))
         # Link 3
         frames.append(Frame(DH_params={'theta': 0,      'd':0,      'a': 0.093, 'alpha': 0,         'type': "revolute"}))
         # Link 4
         if self.__end_effector == "straight":
-            frames.append(Frame(DH_params={'theta': 0,      'd':0,      'a': 0.05,  'alpha': 0,         'type': "revolute"}))
+            frames.append(Frame(DH_params={'theta': 0,      'd':0,      'a': 0.065,  'alpha': 0,         'type': "revolute"}))
              # Tool
             frames.append(Frame(T=np.array([[0, 1, 0, 0.0],
                                             [-1, 0, 0, -0.05],
@@ -114,7 +118,7 @@ class RobotArm():
         return frames 
 
     # Kinematic Methods
-    def fwd_kin(self,q=None):
+    def fwd_kin(self,q=None,frame_no=4,return_details=False):
         if q is None:
             with self.__lock:
                 joint_angles = self.__PV_joint_angles
@@ -127,8 +131,17 @@ class RobotArm():
                 T_global.append(T_global[-1] @ frame.T_local(joint_angles[i]))
             else:
                 T_global.append(T_global[-1] @ frame.T_local())
-
-        return T_global          
+        
+        
+        
+        
+        if return_details:
+            gamma = np.arccos(T_global[frame_no][0,0]/np.cos(joint_angles[0]))*np.sign(T_global[frame_no][2,0])
+            gamma = gamma.item()
+            origin = [T_global[frame_no][0,3].item(),T_global[frame_no][1,3].item(),T_global[frame_no][2,3].item()]
+            return T_global, origin, gamma
+        else:
+            return T_global          
 
     def inv_kin(self,gamma: float,origin: list, elbow="up",tool=None):
         """Computes the set of joint angles for desired tip position and orientation
@@ -393,98 +406,104 @@ class RobotArm():
         # Return Trajectory object in joint space
         return Trajectory(coeffs,tA,tB)
     
-    def follow_traj(self,traj, Ts=0.1, tol=0.05, frame_no=4, elbow="up", DONE=None):
-        """Arm follows `traj`   
+    def follow_traj(self,trajs: list, Ts=0.1, tol=0.05, frame_no=4, elbow="up", DONE=None):
+        """Arm follows `trajs`   
 
         Before the arm follows the desired trajectory,
         the current arm configuration and inital trajectory arm
         configuration must be within `tolerance` [rad].
         If the provided trajectory is in task space, the frame number and elbow configuration can be provided.
 
-        @param traj: trajectory object
+        @param trajs: list of trajectory objects
         @param Ts: Sampling time of movement
         @param tol: tolerance at inital conditions
         """
 
-        assert traj.space in["joint","task"], "Trajectory must be in joint or task space"
         tool = None
-        if traj.space == "task" and frame_no > 4:
-            tool = self.Frames[frame_no].T_local()
+        for traj in trajs:
+            assert traj.space in["joint","task"], "Trajectory must be in joint or task space"
+            if traj.space == "task" and frame_no > 4:
+                tool = self.Frames[frame_no].T_local()
 
+        # Move to start of first trajectory
+        # TODO: check continuitiy for all other traj in trajs
         for i, q_i in enumerate(self.get_cached_jointAngles()):
-            if abs(traj.s_0[i] - q_i) > tol:
-                print(f"Non-Continous Trajectory, linear movement to: {traj.s_0}")
+            if abs(trajs[0].s_0[i] - q_i) > tol:
+                print(f"Non-Continous Trajectory, linear movement to: {trajs[0].s_0}")
                 self.set_speed([0.5]*4)
-                if traj.space == "task":
-                    s_0 = self.inv_kin(gamma=traj.s_0[3],origin=traj.s_0[0:3],elbow=elbow,tool=tool)
-                elif traj.space == "joint":
-                    s_0 = traj.s_0
+                if trajs[0].space == "task":
+                    s_0 = self.inv_kin(gamma=trajs[0].s_0[3],origin=trajs[0].s_0[0:3],elbow=elbow,tool=tool)
+                elif trajs[0].space == "joint":
+                    s_0 = trajs[0].s_0
                 thread, DONE_init = self.run_in_thread(self.move_to_angles,s_0)
                 DONE_init.wait()
                 thread.join()
                 break          
         
+        for traj in trajs:
+            # print("next traj")
+            # input()
 
-        start_time = time.time()
-        last_time = time.time()-Ts
-        while True:
-            current_time = time.time()
-            dt = current_time - last_time        
-            if (dt >= Ts):
-                t =  (current_time - start_time)
-                # print(f"{t:.3f}")   
-                if t+Ts > traj.tB:                    
-                    if traj.space == "task":
-                        X = traj.eval(traj.tB) # next
-                        X_1 = traj.eval(t)     # current
-                        print(f"X: {X}")
-                        print(f"X_1: {X_1}")             
-                        q = self.inv_kin(gamma=X[3],origin=X[0:3],elbow=elbow,tool=tool)
-                        q_1 = self.inv_kin(gamma=X_1[3],origin=X_1[0:3],elbow=elbow,tool=tool)
-                        print(f"q: {q}")
-                        print(f"q_1: {q_1}")  
-                        print(f"dt: {dt}")
-                        print(f"q_diff: {[(a_i - b_i) for a_i, b_i in zip(q,q_1)]}")            
+            start_time = time.time()
+            last_time = time.time()-Ts
+            while True:
+                current_time = time.time()
+                dt = current_time - last_time        
+                if (dt >= Ts):
+                    t =  (current_time - start_time)
+                    # print(f"{t:.3f}")   
+                    if t+Ts > traj.tB:                    
+                        if traj.space == "task":
+                            X = traj.eval(traj.tB) # next
+                            X_1 = traj.eval(t)     # current
+                            # print(f"X: {X}")
+                            # print(f"X_1: {X_1}")             
+                            q = self.inv_kin(gamma=X[3],origin=X[0:3],elbow=elbow,tool=tool)
+                            q_1 = self.inv_kin(gamma=X_1[3],origin=X_1[0:3],elbow=elbow,tool=tool)
+                            # print(f"q: {q}")
+                            # print(f"q_1: {q_1}")  
+                            # print(f"dt: {dt}")
+                            # print(f"q_diff: {[(a_i - b_i) for a_i, b_i in zip(q,q_1)]}")            
+                            
+                            q_d = [(a_i - b_i)/(traj.tB-t) for a_i, b_i in zip(q,q_1)]
+                            
+                            
+                        elif traj.space == "joint": 
+                            q = traj.eval(traj.tB)
+                            q_d = traj.eval(traj.tB,diff = 1,Ts= traj.tB - t)
                         
-                        q_d = [(a_i - b_i)/(traj.tB-t) for a_i, b_i in zip(q,q_1)]
+                        # print(f"q_d: {q_d}")
+                        self.set_speed(q_d)
+                        self.move_to_angles(q,blocking=True)
+                        print(f"Total: {time.time() - start_time:.3f}")
                         
+                        break
+
+                    else:
+                        if traj.space == "task":
+                            X = traj.eval(t+Ts) # next
+                            X_1 = traj.eval(t)     # current   
+                            # print(f"X: {X}")
+                            # print(f"X_1: {X_1}")             
+                            q = self.inv_kin(gamma=X[3],origin=X[0:3],elbow=elbow,tool=tool)
+                            q_1 = self.inv_kin(gamma=X_1[3],origin=X_1[0:3],elbow=elbow,tool=tool)
+                            # print(f"q: {q}")
+                            # print(f"q_1: {q_1}")  
+                            # print(f"dt: {dt}")
+                            # print(f"q_diff: {[(a_i - b_i) for a_i, b_i in zip(q,q_1)]}")      
+                            q_d = [(a_i - b_i)/Ts for a_i, b_i in zip(q,q_1)]
+
+                        elif traj.space == "joint": 
+                            q = traj.eval(t+Ts)
+                            q_d = traj.eval(t+Ts,diff = 1,Ts= dt) # TODO: dt instead of TS?
                         
-                    elif traj.space == "joint": 
-                        q = traj.eval(traj.tB)
-                        q_d = traj.eval(traj.tB,diff = 1,Ts= traj.tB - t)
-                    
-                    print(f"q_d: {q_d}")
-                    self.set_speed(q_d)
-                    self.move_to_angles(q,blocking=True)
-                    print(f"Total: {time.time() - start_time:.3f}")
-                    
-                    break
+                        # print(f"q_d: {q_d}")
+                        self.set_speed(q_d)  
+                        self.move_to_angles(q,blocking=False)
 
-                else:
-                    if traj.space == "task":
-                        X = traj.eval(t+Ts) # next
-                        X_1 = traj.eval(t)     # current   
-                        print(f"X: {X}")
-                        print(f"X_1: {X_1}")             
-                        q = self.inv_kin(gamma=X[3],origin=X[0:3],elbow=elbow,tool=tool)
-                        q_1 = self.inv_kin(gamma=X_1[3],origin=X_1[0:3],elbow=elbow,tool=tool)
-                        print(f"q: {q}")
-                        print(f"q_1: {q_1}")  
-                        print(f"dt: {dt}")
-                        print(f"q_diff: {[(a_i - b_i) for a_i, b_i in zip(q,q_1)]}")      
-                        q_d = [(a_i - b_i)/Ts for a_i, b_i in zip(q,q_1)]
-
-                    elif traj.space == "joint": 
-                        q = traj.eval(t+Ts)
-                        q_d = traj.eval(t+Ts,diff = 1,Ts= dt) # TODO: dt instead of TS?
+                    last_time = current_time
                     
-                    print(f"q_d: {q_d}")
-                    self.set_speed(q_d)  
-                    self.move_to_angles(q,blocking=False)
-
-                last_time = current_time
-                
-            time.sleep(0.005)
+                time.sleep(0.005)
 
         # Signal that the function has finished
         if DONE is not None:
@@ -794,6 +813,7 @@ class Trajectory():
         self.coeffs = coeffs
 
         self.s_0 = self.eval(tA)
+        self.s_e = self.eval(tB)
 
         
         
