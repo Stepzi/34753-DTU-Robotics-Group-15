@@ -3,7 +3,7 @@ import numpy as np
 from dynamixelArm import RobotArm 
 
 def main():
-    arm = RobotArm(device_name="/dev/ttyACM0",end_effector="angled")
+    arm = RobotArm(device_name="/dev/ttyACM0",end_effector="straight")
 
     
 
@@ -42,7 +42,7 @@ def main():
             i = (i+1)%len(traj)
             
             print("hit enter for next move")
-            # inp = input()
+            inp = input()
                          
             time.sleep(0.005)
             

@@ -33,10 +33,16 @@ class RobotArm():
         self.__DXL_MOVING_STATUS_THRESHOLD = 0.05  # [rad] Threshold for detecting movement completion
         self.__DXL_MIN_SPEED = 0.0117 # 0.0117
         self.__DXL_IDS = [1, 2, 3, 4]  # Motor IDs
-        self.joint_limits = [[self.rot_to_rad(0),self.rot_to_rad(1023)],
-        [self.rot_to_rad(93),self.rot_to_rad(927)],
-        [self.rot_to_rad(0),self.rot_to_rad(1023)],
-        [self.rot_to_rad(500),self.rot_to_rad(1023)]]
+        if end_effector == "angled":
+            self.joint_limits = [[self.rot_to_rad(0),self.rot_to_rad(1023)],
+            [self.rot_to_rad(93),self.rot_to_rad(927)],
+            [self.rot_to_rad(0),self.rot_to_rad(1023)],
+            [self.rot_to_rad(500),self.rot_to_rad(1023)]]
+        elif end_effector == "straight":
+            self.joint_limits = [[self.rot_to_rad(0),self.rot_to_rad(1023)],
+            [self.rot_to_rad(93),self.rot_to_rad(927)],
+            [self.rot_to_rad(0),self.rot_to_rad(1023)],
+            [self.rot_to_rad(178),self.rot_to_rad(853)]]
 
         # Digital Twin
         self.twin = DigitalTwin(self)
@@ -620,11 +626,11 @@ class RobotArm():
                     current_position = self.get_joint_angle(motor_id)
                     if current_position is None:
                         break  # Exit if we failed to read the position
-                    print(f"ID: {motor_id}, error: {abs(goal_pos - current_position)}, VE: {self.__motor_speeds[motor_id-1]}")
-                    if abs(goal_pos - self.joint_limits[motor_id-1][0]) < self.__DXL_MOVING_STATUS_THRESHOLD:
+                    # print(f"ID: {motor_id}, error: {abs(goal_pos - current_position)}, VE: {self.__motor_speeds[motor_id-1]}")
+                    if abs(current_position - self.joint_limits[motor_id-1][0]) < self.__DXL_MOVING_STATUS_THRESHOLD:
                         print(f"Position of joint {motor_id} at CW joint Limit")
                         break
-                    if abs(goal_pos - self.joint_limits[motor_id-1][1]) < self.__DXL_MOVING_STATUS_THRESHOLD:
+                    if abs(current_position - self.joint_limits[motor_id-1][1]) < self.__DXL_MOVING_STATUS_THRESHOLD:
                         print(f"Position of joint {motor_id} at CCW joint Limit")
                         break
                     if abs(goal_pos - current_position) < self.__DXL_MOVING_STATUS_THRESHOLD:
@@ -646,6 +652,7 @@ class RobotArm():
         #   None
        
         self.__motor_speeds = speeds
+        speeds = [abs(item) for item in speeds]
 
         for motor_id, speed in zip(self.__DXL_IDS, speeds):
             # assert (speed > 0.0117 and speed <= 11.9),"Movement speed out of range, enter value between ]0,1]"
@@ -654,7 +661,7 @@ class RobotArm():
             if speed > 11.9:
                 speed = 11.9
             if self.__has_hardware:
-                result, error = self.__packetHandler.write2ByteTxRx(self.__portHandler,motor_id, self.__ADDR_MX_MOVING_SPEED, int(self.radps_to_rot(abs(speed))))
+                result, error = self.__packetHandler.write2ByteTxRx(self.__portHandler,motor_id, self.__ADDR_MX_MOVING_SPEED, int(self.radps_to_rot(speed)))
                 if result != dxl.COMM_SUCCESS:
                     print(f"Failed to set speed for motor {motor_id}: {self.__packetHandler.getTxRxResult(result)}")
     
@@ -706,7 +713,7 @@ class RobotArm():
                     dq = error*gain*dt
                     
                     if (abs(dq) > speeds[i]*dt):
-                        dq = speeds[i]*dt*np.sign(dq)
+                        dq = abs(speeds[i])*dt*np.sign(dq)
                                         
                     # print(f"dq {i+1}: {dq:.4f}, ",end='')
 
