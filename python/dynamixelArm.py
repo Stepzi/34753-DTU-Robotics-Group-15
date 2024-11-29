@@ -59,7 +59,7 @@ class RobotArm():
         
 
         # Robot Configuration
-        self.__SV_joint_angles = [0.0,0.0,0.0,0.0] # [rad]
+        self.__SV_joint_angles = [0.0,np.pi/4,-np.pi/2,np.pi/4] # [rad]
         with self.__lock:
             self.__PV_joint_angles = [0.0,0.0,0.0,0.0] # [rad]
         self.__motor_speeds = [1,1,1,1] # [rad/s] (0.0117,11.9)
@@ -120,8 +120,7 @@ class RobotArm():
     # Kinematic Methods
     def fwd_kin(self,q=None,frame_no=4,return_details=False):
         if q is None:
-            with self.__lock:
-                joint_angles = self.__PV_joint_angles
+            joint_angles = self.get_cached_jointAngles()
         else:
             joint_angles = q
 
@@ -211,7 +210,7 @@ class RobotArm():
         r = np.sqrt(w_x**2 +w_y**2)
         s = w_z-self.Frames[1].d
 
-        assert (np.sqrt(r**2+s**2)<self.Frames[3].a+self.Frames[2].a), "Point outside reachable workspace"
+        assert (np.sqrt(r**2+s**2)<self.Frames[3].a+self.Frames[2].a), f"Point {origin} outside reachable workspace"
 
         cos3 = (r**2+s**2-self.Frames[2].a**2-self.Frames[3].a**2)/(2*self.Frames[2].a*self.Frames[3].a)
         if(elbow == "up"):
@@ -314,7 +313,7 @@ class RobotArm():
 
         dc = cB-cA
 
-         # Calculate Polynomial for each joint
+        # Calculate Polynomial for each dimension x,y,z,gamma
         coeffs = []
         if order == 1:
             for i in range(4):
@@ -803,8 +802,9 @@ class Frame:
                              [0, 0, 0, 1]])
         
 class Trajectory():
-    def __init__(self,coeffs,tA,tB,space= "joint"):
+    def __init__(self,coeffs,tA,tB,space= "joint",type="poly"):
         
+        self.type = type
         self.dim = len(coeffs)
         self.space = space
         self.tA = tA
