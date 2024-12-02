@@ -120,8 +120,7 @@ class RobotArm():
     # Kinematic Methods
     def fwd_kin(self,q=None,frame_no=4,return_details=False):
         if q is None:
-            with self.__lock:
-                joint_angles = self.__PV_joint_angles
+            joint_angles = self.get_cached_jointAngles()
         else:
             joint_angles = q
 
@@ -314,7 +313,7 @@ class RobotArm():
 
         dc = cB-cA
 
-         # Calculate Polynomial for each joint
+        # Calculate Polynomial for each dimension x,y,z,gamma
         coeffs = []
         if order == 1:
             for i in range(4):
