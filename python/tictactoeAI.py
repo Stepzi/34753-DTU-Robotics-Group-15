@@ -11,7 +11,7 @@ Therefore,
 # https://www.geeksforgeeks.org/finding-optimal-move-in-tic-tac-toe-using-minimax-algorithm-in-game-theory/
 
 class tttAI():
-	def __init__(self, cellWidth = 0.05, topleft = [0.0,0.0,0.0]):
+	def __init__(self, mark, cellWidth = 0.05, topleft = [0.0,0.0,0.0]):
 		# adjust the cell width to the grid cell width/height in meters
 		self.board = [ 
 			[ None, None, None ], 
@@ -20,6 +20,7 @@ class tttAI():
 		]
 		self.cellWidth = cellWidth
 		self.topleft = topleft
+		self.mark = mark
 
 
 	def isMovesLeft(self, board) : 
@@ -216,19 +217,41 @@ class tttAI():
 			return "Draw"
 
 		return "Game continues"
+	
+	def drawBoard(self):
+		nMark = "O" if self.mark=="X" else "X"
+
+		for row in range(5):
+			for col in range(3):
+				if row in [0,2,4]:
+					if self.board[int(row/2)][col] is None:
+						print(f"   ",end="")
+					elif self.board[int(row/2)][col]:
+						print(f" {self.mark} ",end="")
+					elif not self.board[int(row/2)][col]:
+						print(f" {nMark} ",end="")
+					if col != 2:
+						print("|",end="")
+			
+			if row in [1,3]:	
+				print("\n---+---+---")
+		
+		print("\n")
 
 
 if __name__ == "__main__":
 	# create tictactoe object:
-	tictacrobot = tttAI() # board always starts as empty
+	tictacrobot = tttAI(mark="X") # board always starts as empty
 
 	# the board is now updated using our advanced computer vision:
-	print("**Simulated update of the board**")
+	print("** Simulated update of the board **")
 	tictacrobot.board = [ 
 		[ True, False, True ], 
 		[ False, False, True ], 
 		[ None, None, None ] 
 	] 
+
+	tictacrobot.drawBoard()
 
 	# check state of game before you find best move!
 	# If result is not "Game continues", the game is over and should not proceed.
@@ -252,7 +275,8 @@ if __name__ == "__main__":
 		[ True, False, True ], 
 		[ False, False, True ], 
 		[ None, None, True ] 
-	] 
+	]
+	tictacrobot.drawBoard() 
 	# and check the state:
 	print(tictacrobot.checkGameState())
 

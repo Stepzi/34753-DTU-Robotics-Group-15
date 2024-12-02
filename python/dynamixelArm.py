@@ -210,7 +210,7 @@ class RobotArm():
         r = np.sqrt(w_x**2 +w_y**2)
         s = (w_z-self.Frames[1].d)
 
-        assert abs(np.sqrt(r**2+s**2)-(self.Frames[3].a+self.Frames[2].a)) > (1.e-17), "Point outside reachable workspace"
+        assert np.sqrt(r**2+s**2) < (self.Frames[3].a+self.Frames[2].a) , "Point outside reachable workspace"
 
         cos3 = (r**2+s**2-self.Frames[2].a**2-self.Frames[3].a**2)/(2*self.Frames[2].a*self.Frames[3].a)
         if(elbow == "up"):
@@ -549,7 +549,7 @@ class RobotArm():
                         # print(f"q_d: {q_d}")
                         self.set_speed(q_d)
                         self.move_to_angles(q,blocking=True)
-                        print(f"Total: {time.time() - start_time:.3f}")
+                        # print(f"Total: {time.time() - start_time:.3f}")
                         
                         break
 
