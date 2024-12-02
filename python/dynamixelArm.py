@@ -59,7 +59,7 @@ class RobotArm():
         
 
         # Robot Configuration
-        self.__SV_joint_angles = [0.0,0.0,0.0,0.0] # [rad]
+        self.__SV_joint_angles = [0.0,-np.pi/4,np.pi/2,-np.pi/4] # [rad]
         with self.__lock:
             self.__PV_joint_angles = [0.0,0.0,0.0,0.0] # [rad]
         self.__motor_speeds = [1,1,1,1] # [rad/s] (0.0117,11.9)
@@ -209,9 +209,9 @@ class RobotArm():
 
 
         r = np.sqrt(w_x**2 +w_y**2)
-        s = w_z-self.Frames[1].d
+        s = (w_z-self.Frames[1].d)
 
-        assert (np.sqrt(r**2+s**2)<self.Frames[3].a+self.Frames[2].a), "Point outside reachable workspace"
+        assert abs(np.sqrt(r**2+s**2)-(self.Frames[3].a+self.Frames[2].a)) > (1.e-17), "Point outside reachable workspace"
 
         cos3 = (r**2+s**2-self.Frames[2].a**2-self.Frames[3].a**2)/(2*self.Frames[2].a*self.Frames[3].a)
         if(elbow == "up"):
@@ -283,7 +283,7 @@ class RobotArm():
 
         return np.linalg.inv(T) @ boundary_cond
 
-    def task_polyTraj(self,A: dict,B: dict,T,order,elbow="up"):
+    def task_polyTraj(self,A: dict,B: dict,T,order):
         """Creates a straight-line trajectory in the task space between configurations `A` and `B`       
         
         The configuration Dicts contain the following key-value pairs:
@@ -326,9 +326,84 @@ class RobotArm():
             for i in range(4):
                 coeffs.append(np.array([cA[i]+s[0]*dc[i],s[1]*dc[i],s[2]*dc[i],s[3]*dc[i],s[4]*dc[i],s[5]*dc[i]]).reshape(order+1,1))
         # Return Trajectory object in joint space
-        return Trajectory(coeffs,0,T,space="task")
+        return Trajectory(0,T,coeffs=coeffs,space="task")
 
+    def task_genericTraj(self,funcs: list,A: dict,B: dict,T,order):
+        """Creates a circular trajectory in the task space between configurations `A` and `B`       
+        
+        TODO
 
+        @param A: dict of configuration at time tA
+        @param B: dict of configuration at time tB
+        @param T: Trajectory Duration
+        @param order: order of polynomial
+        @returns: Trajectory Object in joint space
+        """
+
+        if order == 1:
+            s = self.poly_interpol(A=[0],B=[1],tA=0,tB=T,order=order)
+        elif order == 3:
+            s = self.poly_interpol(A=[0,A['v']],B=[1,B['v']],tA=0,tB=T,order=order)
+        elif order == 5:
+            s = self.poly_interpol(A=[0,A['v'],A['a']],B=[1,B['v'],B['a']],tA=0,tB=T,order=order)
+
+        
+        s = Trajectory(0,T,coeffs=[s],space="traj")
+
+        
+        functions = []
+        for func in funcs:
+            if func['type'] == "const":
+                def genFun(t, a0=func['a0']):  # Capture a0 as a default argument
+                    return a0
+                functions.append(genFun)
+
+            elif func['type'] == "linear":
+                def genFun(t, a0=func['a0'], a1=func['a1']):  # Capture a0 and a1
+                    return a0 + a1 * s.eval(t)[0]
+                functions.append(genFun)
+
+            elif func['type'] == "sin":
+                def genFun(t, offset=func['offset'], amplitude=func['amplitude'], freq=func['freq'], phase=func['phase']):  # Capture all parameters
+                    return offset + amplitude * np.sin(freq * s.eval(t)[0] + phase)
+                functions.append(genFun)
+
+            elif func['type'] == "cos":
+                def genFun(t, offset=func['offset'], amplitude=func['amplitude'], freq=func['freq'], phase=func['phase']):  # Capture all parameters
+                    return offset + amplitude * np.cos(freq * s.eval(t)[0] + phase)
+                functions.append(genFun)
+
+            else:
+                raise ValueError(f"unsupported function: '{func['type']}'")
+        
+        
+        return Trajectory(0,T,funcs=functions,space="task")
+
+        
+        
+        # cA = A['origin'].copy()
+        # cA.append(A['gamma'])
+        # cA = np.array(cA).reshape(4,1)
+
+        # cB = B['origin'].copy()
+        # cB.append(B['gamma'])
+        # cB = np.array(cB).reshape(4,1)
+
+        # dc = cB-cA
+
+        #  # Calculate Polynomial for each joint
+        # coeffs = []
+        # if order == 1:
+        #     for i in range(4):
+        #         coeffs.append(np.array([cA[i]+s[0]*dc[i],s[1]*dc[i]]).reshape(order+1,1))
+        # elif order == 3:
+        #     for i in range(4):
+        #         coeffs.append(np.array([cA[i]+s[0]*dc[i],s[1]*dc[i],s[2]*dc[i],s[3]*dc[i]]).reshape(order+1,1))
+        # elif order == 5:
+        #     for i in range(4):
+        #         coeffs.append(np.array([cA[i]+s[0]*dc[i],s[1]*dc[i],s[2]*dc[i],s[3]*dc[i],s[4]*dc[i],s[5]*dc[i]]).reshape(order+1,1))
+        # # Return Trajectory object in joint space
+        # return Trajectory(coeffs,0,T,space="task")
 
     def joint_polyTraj(self,frame_no,A: dict,B: dict,tA,tB,order):
         """Creates a trajectory for the frame `frame_no` in the joint space between configurations `A` and `B`       
@@ -404,7 +479,7 @@ class RobotArm():
 
         
         # Return Trajectory object in joint space
-        return Trajectory(coeffs,tA,tB)
+        return Trajectory(tA,tB,coeffs=coeffs)
     
     def follow_traj(self,trajs: list, Ts=0.1, tol=0.05, frame_no=4, elbow="up", DONE=None):
         """Arm follows `trajs`   
@@ -803,22 +878,35 @@ class Frame:
                              [0, 0, 0, 1]])
         
 class Trajectory():
-    def __init__(self,coeffs,tA,tB,space= "joint"):
-        
-        self.dim = len(coeffs)
+    def __init__(self,tA,tB,coeffs=None,funcs = None, space= "joint"):
+        assert coeffs is not None or funcs is not None, "Coeffs or Funcs needs to be defined"
         self.space = space
         self.tA = tA
         self.tB = tB
 
-        self.coeffs = coeffs
+        if coeffs is not None:
+            self.type = "poly"
+            self.coeffs = coeffs
+            self.dim = len(coeffs)
+
+        if funcs is not None:
+            self.type = "generic"
+            self.funcs = funcs
+            self.dim = len(funcs)
+
 
         self.s_0 = self.eval(tA)
         self.s_e = self.eval(tB)
-
         
         
 
     def eval(self,t: float,diff = 0,Ts = None):
+        if self.type == "poly":
+            return self._poly_eval(t,diff,Ts)
+        elif self.type == "generic":
+            return self._generic_eval(t)
+        
+    def _poly_eval(self,t,diff,Ts):         
         assert diff in [0, 1, 2], f"Derivative of order {diff} not supported"
         
         if Ts is not None:
@@ -830,8 +918,6 @@ class Trajectory():
 
         
         out = [0.0] * self.dim
-
-
 
         for i in range(self.dim):
             if self.coeffs[i].size == 2:
@@ -871,6 +957,14 @@ class Trajectory():
            
         return out
     
+    def _generic_eval(self,t):
+        out = [0.0] * self.dim
+
+        for i in range(self.dim):
+            out[i] = self.funcs[i](t)
+           
+        return out
+
     def plot(self):
         # Create a figure with subplots
         fig, axs = plt.subplots(self.dim, 1)
