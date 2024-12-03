@@ -13,7 +13,7 @@ class tttAI:
     def isMovesLeft(self, board):
         for i in range(3):
             for j in range(3):
-                if board[i][j] == None:
+                if board[i][j] is None:
                     return True
         return False
 
@@ -54,7 +54,7 @@ class tttAI:
             best = -1000
             for i in range(3):
                 for j in range(3):
-                    if board[i][j] == None:
+                    if board[i][j] is None:
                         board[i][j] = True
                         best = max(best, self.minimax(board, depth + 1, not isMax))
                         board[i][j] = None
@@ -63,7 +63,7 @@ class tttAI:
             best = 1000
             for i in range(3):
                 for j in range(3):
-                    if board[i][j] == None:
+                    if board[i][j] is None:
                         board[i][j] = False
                         best = min(best, self.minimax(board, depth + 1, not isMax))
                         board[i][j] = None
@@ -74,7 +74,7 @@ class tttAI:
         bestMove = (-1, -1)
         for i in range(3):
             for j in range(3):
-                if self.board[i][j] == None:
+                if self.board[i][j] is None:
                     self.board[i][j] = True
                     moveVal = self.minimax(self.board, 0, False)
                     self.board[i][j] = None
@@ -85,15 +85,21 @@ class tttAI:
 
 
 # Grid parameters
-grid_x_start = 50
-grid_y_start = 50
 rows = 3
 columns = 3
 grid_line_thickness = 10  # Thickness of the grid lines
 black_pixel_threshold = 10000  # Threshold for number of black pixels
 
 # Capture a single frame from the webcam
-videoCapture = cv2.VideoCapture(0)
+videoCapture = cv2.VideoCapture(1)
+
+# Set HD resolution (1280x720)
+width = 1280  # HD width
+height = 720  # HD height
+videoCapture.set(cv2.CAP_PROP_FRAME_WIDTH, width)
+videoCapture.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+print(f"Resolution set to: {width}x{height}")
+
 print("Press 's' to capture the image.")
 while True:
     ret, frame = videoCapture.read()
@@ -112,13 +118,14 @@ while True:
 videoCapture.release()
 cv2.destroyAllWindows()
 
-# Resize the captured image
-scale_percent = 50  # Resize to 50% of original size
-frame = cv2.resize(frame, None, fx=scale_percent / 100, fy=scale_percent / 100, interpolation=cv2.INTER_AREA)
+# Initialize the Tic Tac Toe AI
+tictactoe = tttAI(mark="X")
 
-# Update grid parameters based on resized image
-grid_width = frame.shape[1]
-grid_height = frame.shape[0]
+# Dynamically calculate the grid dimensions based on the frame
+grid_x_start = 0  # Top-left corner of the frame
+grid_y_start = 0
+grid_width = frame.shape[1]  # Use the frame's width
+grid_height = frame.shape[0]  # Use the frame's height
 cell_width = grid_width // columns
 cell_height = grid_height // rows
 
@@ -128,25 +135,16 @@ gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 # Apply binary thresholding
 _, binary = cv2.threshold(gray, 100, 255, cv2.THRESH_BINARY)
 
-# Create a mask to ignore the grid lines
-grid_mask = np.ones_like(binary, dtype=np.uint8) * 255
-
-# Draw the grid lines on the mask
-for row in range(1, rows):
-    y = grid_y_start + row * cell_height
-    cv2.line(grid_mask, (grid_x_start, y), (grid_x_start + grid_width, y), 0, grid_line_thickness)
-for col in range(1, columns):
-    x = grid_x_start + col * cell_width
-    cv2.line(grid_mask, (x, grid_y_start), (x, grid_y_start + grid_height), 0, grid_line_thickness)
-
-# Apply the mask to the binary image
-binary = cv2.bitwise_and(binary, grid_mask)
-
-# Create a copy of the binary image for annotations
+# Convert the binary image to color for annotation
 annotated_binary = cv2.cvtColor(binary, cv2.COLOR_GRAY2BGR)
 
-# Initialize the AI
-tictactoe = tttAI(mark="X")
+# Draw the grid lines dynamically
+for row in range(1, rows):
+    y = grid_y_start + row * cell_height
+    cv2.line(annotated_binary, (grid_x_start, y), (grid_x_start + grid_width, y), (0, 255, 0), grid_line_thickness)
+for col in range(1, columns):
+    x = grid_x_start + col * cell_width
+    cv2.line(annotated_binary, (x, grid_y_start), (x, grid_y_start + grid_height), (0, 255, 0), grid_line_thickness)
 
 # Loop through each grid cell
 for row in range(rows):
@@ -176,14 +174,13 @@ for row in range(rows):
         # Check if the cell is occupied (above the threshold)
         if black_pixel_count > black_pixel_threshold:
             if tictactoe.board[row][col] is None:
-                # Add the opponent's move (O)
-                tictactoe.board[row][col] = False
+                tictactoe.board[row][col] = False  # Opponent's move
                 print(f"Object detected in cell ({row},{col}).")
 
                 # Get the AI's best move
                 bestMove = tictactoe.findBestMove()
                 if bestMove != (-1, -1):
-                    tictactoe.board[bestMove[0]][bestMove[1]] = True  # Robot's move (X)
+                    tictactoe.board[bestMove[0]][bestMove[1]] = True  # AI's move
                     print(f"AI plays at ({bestMove[0]},{bestMove[1]}).")
 
 # Draw the grid and current game state
