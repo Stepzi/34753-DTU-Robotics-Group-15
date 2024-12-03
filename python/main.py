@@ -9,11 +9,23 @@ def main():
     tttR = tttAI(topleft=[0.05,0.075,0],mark="O",)
     tttR.drawBoard()
 
-    arm.move_to_angles([0,np.deg2rad(30),np.deg2rad(-60),0])
 
     while tttR.checkGameState() == "Game continues":
         try:
-        
+
+            wait = arm.joint_polyTraj(frame_no=4, 
+                          A={'gamma': None, 'origin': None, 'elbow':"up", 'v': [0,0,0], 'gamma_d': 0},
+                          B={'gamma': -np.deg2rad(30), 'origin': [0,0.1,0.2], 'elbow':"up", 'v': [0,0,0], 'gamma_d': 0},
+                          tA = 0,
+                          tB = 3,
+                          order = 3)
+            
+            thread, DONE = arm.run_in_thread(arm.follow_traj,[wait],Ts=0.1)
+            while(not DONE.is_set()):
+                arm.twin.draw_arm(draw_jointSpace=False)
+                time.sleep(0.005)
+
+           
             print("Opponent Plays:")
             row = input("Row: ")
             col = input("Column: ")
@@ -29,7 +41,6 @@ def main():
 
             # we call "find best move", based on the current board
             bestMove = tttR.findBestMove()
-            #tttR.board[bestMove[0]][bestMove[1]] = True
             tttR.drawBoard()
             print("The Optimal Move is :") 
             print("ROW:", bestMove[0], " COL:", bestMove[1]) # (0,0) is top-left cell of grid

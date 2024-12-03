@@ -425,6 +425,13 @@ class RobotArm():
         if frame_no > 4:
             tool = self.Frames[frame_no].T_local()
 
+
+        _,o_0,gamma_0 = self.fwd_kin(frame_no=frame_no,return_details=True)
+        if A['gamma'] is None:        
+            A['gamma'] = gamma_0
+        if A['origin'] is None:        
+            A['origin'] = o_0
+            
         qA = self.inv_kin(A['gamma'],A['origin'],elbow=A['elbow'],tool=tool)
         qB = self.inv_kin(B['gamma'],B['origin'],elbow=B['elbow'],tool=tool)
 
