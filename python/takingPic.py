@@ -88,7 +88,7 @@ class tttAI:
 rows = 3
 columns = 3
 grid_line_thickness = 10  # Thickness of the grid lines
-black_pixel_threshold = 10000  # Threshold for number of black pixels
+black_pixel_threshold = 8000  # Threshold for number of black pixels
 
 # Capture a single frame from the webcam
 videoCapture = cv2.VideoCapture(1)
