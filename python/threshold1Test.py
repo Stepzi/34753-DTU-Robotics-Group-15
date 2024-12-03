@@ -94,11 +94,11 @@ columns = 3
 cell_width = grid_width // columns
 cell_height = grid_height // rows
 grid_line_thickness = 10  # Thickness of the grid lines
-black_pixel_threshold = 500  # Threshold for number of black pixels
+black_pixel_threshold = 10000 # Threshold for number of black pixels
 buffer_time = 5  # Time in seconds to wait after threshold is crossed
 
 # Initialize the webcam and AI
-videoCapture = cv2.VideoCapture(1)
+videoCapture = cv2.VideoCapture(0)
 tictactoe = tttAI(mark="X")
 
 # Dictionary to track the time when a threshold was crossed for each cell
@@ -114,7 +114,7 @@ while True:
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
     # Apply binary thresholding
-    _, binary = cv2.threshold(gray, 127, 255, cv2.THRESH_BINARY)
+    _, binary = cv2.threshold(gray, 100, 255, cv2.THRESH_BINARY)
 
     # Create a mask to ignore the grid lines
     grid_mask = np.ones_like(binary, dtype=np.uint8) * 255
@@ -210,4 +210,3 @@ while True:
 # Release resources
 videoCapture.release()
 cv2.destroyAllWindows()
- 
