@@ -184,6 +184,8 @@ class tttAI():
 		# update board with optimal move
 		self.board[bestMove[0]][bestMove[1]] = True
 
+		self.board[human_move[0]][human_move[1]] = True
+
 		# return best move
 		return bestMove 
 	
