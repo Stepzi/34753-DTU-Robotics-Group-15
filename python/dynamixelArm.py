@@ -33,7 +33,7 @@ class RobotArm():
         self.__TORQUE_DISABLE = 0
         self.__DXL_MOVING_STATUS_THRESHOLD = 0.05  # [rad] Threshold for detecting movement completion
         self.__DXL_MIN_SPEED = 0.2 # 0.0117
-        self.__DXL_IDS = [1, 2, 3, 4]  # Motor IDs
+        self.__DXL_IDS = [1, 152, 3, 4]  # Motor IDs
         if end_effector == "angled":
             self.joint_limits = [[self.rot_to_rad(0),self.rot_to_rad(1023)],
             [self.rot_to_rad(93),self.rot_to_rad(927)],
@@ -695,8 +695,8 @@ class RobotArm():
 
     def move_to_angles(self, goal_positions,blocking=True, DONE = None):
         # Move each motor to the target position specified in goal_positions
-        for motor_id, goal_pos in zip(self.__DXL_IDS, goal_positions):
-            self.set_joint_angle(motor_id, goal_pos)
+        for joint, goal_pos in zip(range(1,5), goal_positions):
+            self.set_joint_angle(joint, goal_pos)
 
         if blocking:
             # Wait until all motors reach their goal positions
@@ -708,7 +708,7 @@ class RobotArm():
             # print(f"Should take max: {max(ts)}")
                     
             start = time.time()
-            for motor_id, goal_pos in zip(self.__DXL_IDS, goal_positions):
+            for joint, goal_pos in zip(range(1,5), goal_positions):
                 
                 while True:
                     # print(f"SV: {self.__SV_joint_angles}")
@@ -716,15 +716,15 @@ class RobotArm():
                     # print(f"VE: {[float(i) for i in self.__motor_speeds]}")
                     # if time.time()-start > 10:
                     #     raise ValueError("Timout: Movement took to long")
-                    current_position = self.get_joint_angle(motor_id)
+                    current_position = self.get_joint_angle(joint)
                     if current_position is None:
                         break  # Exit if we failed to read the position
-                    # print(f"ID: {motor_id}, error: {abs(goal_pos - current_position)}, VE: {self.__motor_speeds[motor_id-1]}")
-                    if abs(current_position - self.joint_limits[motor_id-1][0]) < self.__DXL_MOVING_STATUS_THRESHOLD:
-                        print(f"Position of joint {motor_id} at CW joint Limit")
+                    # print(f"ID: {joint}, error: {abs(goal_pos - current_position)}, VE: {self.__motor_speeds[joint-1]}")
+                    if abs(current_position - self.joint_limits[joint-1][0]) < self.__DXL_MOVING_STATUS_THRESHOLD:
+                        print(f"Position of joint {joint} at CW joint Limit")
                         break
-                    if abs(current_position - self.joint_limits[motor_id-1][1]) < self.__DXL_MOVING_STATUS_THRESHOLD:
-                        print(f"Position of joint {motor_id} at CCW joint Limit")
+                    if abs(current_position - self.joint_limits[joint-1][1]) < self.__DXL_MOVING_STATUS_THRESHOLD:
+                        print(f"Position of joint {joint} at CCW joint Limit")
                         break
                     if abs(goal_pos - current_position) < self.__DXL_MOVING_STATUS_THRESHOLD:
                         break  # Movement complete for this motor
