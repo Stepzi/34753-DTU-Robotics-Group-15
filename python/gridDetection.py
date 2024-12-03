@@ -2,27 +2,28 @@ import os
 import cv2
 import numpy as np
 from scipy.spatial import distance
+import time
 
 def image_processing(image):
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    _, thresholded = cv2.threshold(gray, 100 , 255, cv2.THRESH_BINARY)
-    blurred = cv2.GaussianBlur(thresholded, (5, 5), 0)
+    _, thresholded = cv2.threshold(gray, 20  , 255, cv2.THRESH_BINARY)
+    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
     return blurred
 
-def detect_intersections(image, epsilon=10):
+def detect_intersections(image, epsilon=20):
     """
     Detects the intersections of the Tic Tac Toe grid in the image and filters duplicates.
     
     Args:
     - image: The original image.
     - epsilon: The maximum distance to consider points as duplicates.
-    
+
     Returns:
     - List of unique intersection points.
     """
     
     edges = cv2.Canny(image, 50, 150, apertureSize=3)
-    lines = cv2.HoughLinesP(edges, 1, np.pi / 180, threshold=100, minLineLength=100, maxLineGap=10)
+    lines = cv2.HoughLinesP(edges, 1, np.pi / 180, threshold=50, minLineLength=50, maxLineGap=10)
 
     vertical_lines = []
     horizontal_lines = []
@@ -305,90 +306,41 @@ def int_to_grid(input):
 	return cell
 
 def move_detection():
-    debug =          False 
-    showGridPoints = False
-    showSquares =    False
+    debug = False 
+    live_feed = True
 
-    image_path = "python/Pictures/live000.png"
-    raw_image = cv2.imread(image_path)
-    if raw_image is None:
-        raise FileNotFoundError(f"Image file '{image_path}' not found.")
-    """
-    cap = cv2.VideoCapture(1)  # 0 for the default webcam, change to 1 or 2 for other webcams
-
-    if not cap.isOpened():
-        print("Error: Could not open webcam.")
-        exit()
-
-    while True:
-        # Capture a frame-by-frame
-        ret, image = cap.read()
-
-        if not ret:
-            print("Error: Failed to capture image.")
-            break
-
-        # Display the live webcam feed
-        cv2.imshow("Webcam Feed", image)
-
-        # Wait for the 'c' key to capture a single frame
-        if cv2.waitKey(1) & 0xFF == ord('c'):
-            # Save or show the captured frame
-            captured_image = image  # Store the captured frame
-            cv2.imshow("Captured Image", captured_image)
-            print("Captured an image!")
-
-        # Press 'q' to exit the loop
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
-
-    # Release the webcam and close all OpenCV windows
-    cap.release()
-    cv2.imshow("Camera", image)
-    cv2.waitKey()    
-    """
+    if live_feed:
+        cap = cv2.VideoCapture(1)  # 0 for the default webcam, change to 1 or 2 for other webcams
+        if not cap.isOpened():
+            print("Error: Could not open webcam.")
+            exit()
+        ret, raw_image = cap.read()
+        cv2.imwrite("python/Pictures/img1.png", raw_image)
+    else:
+        image_path = "python/Pictures/img1.png"
+        raw_image = cv2.imread(image_path)
+        if raw_image is None:
+            raise FileNotFoundError(f"Image file '{image_path}' not found.")    
 
     image = image_processing(raw_image)
     squares = grid_detection(image, debug)
     start_averages = pixel_average(squares, debug)
 
-    image_path = "python/Pictures/live10.png"
-    raw_image = cv2.imread(image_path)
-    if raw_image is None:
-        raise FileNotFoundError(f"Image file '{image_path}' not found.")
+    if live_feed:
+        ret, raw_image = cap.read()
+        cv2.imwrite("python/Pictures/img2.png", raw_image)
+    else:
+        image_path = "python/Pictures/img2.png"
+        raw_image = cv2.imread(image_path)
+        if raw_image is None:
+            raise FileNotFoundError(f"Image file '{image_path}' not found.")
 
     image = image_processing(raw_image)
     squares = grid_detection(image, debug)
     averages = pixel_average(squares, debug)
 
-    diff = pixel_difference(start_averages, averages, debug, threshold=20)
-    """
-    image_path = "python/Pictures/live10.png"
-    raw_image = cv2.imread(image_path)
-    if raw_image is None:
-        raise FileNotFoundError(f"Image file '{image_path}' not found.")
-
-    image = image_processing(raw_image)
-    squares = grid_detection(image, debug)
-    start_averages = pixel_average(squares, debug)
-
-    image_path = "python/Pictures/live20.png"
-    raw_image = cv2.imread(image_path)
-    if raw_image is None:
-        raise FileNotFoundError(f"Image file '{image_path}' not found.")
-
-    image = image_processing(raw_image)
-    squares = grid_detection(image, debug)
-    averages = pixel_average(squares, debug)
-
-    diff = pixel_difference(start_averages, averages, threshold=20)
-
-    #robot_input = int(input("Robot input: ")) - 1  # Subtract 1 to match 0-based index
-    #determine_inputs(diff, robot_input, 10)
-
-    cv2.destroyAllWindows()
-    """
-
+    diff = pixel_difference(start_averages, averages, debug, threshold=5)
+    print(diff)
     return int_to_grid(diff)
 
 cell = move_detection()
