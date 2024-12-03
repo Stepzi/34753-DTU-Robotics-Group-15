@@ -37,12 +37,12 @@ class RobotArm():
         if end_effector == "angled":
             self.joint_limits = [[self.rot_to_rad(0),self.rot_to_rad(1023)],
             [self.rot_to_rad(93),self.rot_to_rad(927)],
-            [self.rot_to_rad(100),self.rot_to_rad(1023)],
+            [self.rot_to_rad(50),self.rot_to_rad(1023)],
             [self.rot_to_rad(500),self.rot_to_rad(1023)]]
         elif end_effector == "straight":
             self.joint_limits = [[self.rot_to_rad(0),self.rot_to_rad(1023)],
             [self.rot_to_rad(93),self.rot_to_rad(927)],
-            [self.rot_to_rad(100),self.rot_to_rad(1023)],
+            [self.rot_to_rad(50),self.rot_to_rad(1023)],
             [self.rot_to_rad(178),self.rot_to_rad(853)]]
 
         # Digital Twin
@@ -108,7 +108,7 @@ class RobotArm():
                                             [0, 0, 1, 0.0],
                                             [0, 0, 0, 1]])))
         elif self.__end_effector == "angled":
-            frames.append(Frame(DH_params={'theta': -np.pi/2,      'd':0,      'a': 0.09,  'alpha': 0,         'type': "revolute"}))
+            frames.append(Frame(DH_params={'theta': -np.pi/2,      'd':0,      'a': 0.085,  'alpha': 0,         'type': "revolute"}))
             # Tool
             frames.append(Frame(T=np.array([[1, 0, 0, 0.0],
                                             [0, 1, 0, 0.015],

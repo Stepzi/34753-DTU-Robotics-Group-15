@@ -4,9 +4,10 @@ from dynamixelArm import RobotArm
 from tictactoeAI import tttAI
 
 def main():
-    arm = RobotArm(device_name="/dev/ttyACM0",end_effector="straight")
-    botA = tttAI(topleft=[0.025,0.075,0],mark="X")
-    botB = tttAI(topleft=[0.025,0.075,0],mark="O")
+    arm = RobotArm(device_name="/dev/ttyACM0",end_effector="angled")
+    frame_no = 5
+    botA = tttAI(topleft=[0.1,0.0375,0],cellWidth=0.025,mark="X")
+    botB = tttAI(topleft=[0.1,0.0375,0],cellWidth=0.025,mark="O")
 
     player = [botA,botB]
     i = 0
@@ -26,15 +27,15 @@ def main():
             print("The next point is: ", nextpoint)
            
             if player[i].mark == "X":
-                thread, DONE = arm.patterns.cross(center=nextpoint,frame_no=4,gamma=-np.deg2rad(60))
+                thread, DONE = arm.patterns.cross(center=nextpoint,frame_no=frame_no,size=0.01,gamma=-np.deg2rad(90),Ts=0.1)
             if player[i].mark == "O":
-                thread, DONE = arm.patterns.circle(center=nextpoint,frame_no=4,radius=0.02,gamma=-np.deg2rad(60))
+                thread, DONE = arm.patterns.circle(center=nextpoint,frame_no=frame_no,radius=0.01,gamma=-np.deg2rad(90),Ts=0.1)
             while(not DONE.is_set()):
                 arm.twin.draw_arm(draw_jointSpace=False)
                 time.sleep(0.005)
             
             i = i_next
-            input("Hit Enter for next move...")
+            # input("Hit Enter for next move...")
                 
 
         

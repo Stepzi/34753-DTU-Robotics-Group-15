@@ -6,7 +6,7 @@ from tictactoeAI import tttAI
 def main():
     arm = RobotArm(device_name="/dev/ttyACM0",end_effector="angled")
     frame_no = 5
-    tttR = tttAI(topleft=[0.025,0.075,0],mark="X",)
+    tttR = tttAI(topleft=[0.05,0.075,0],mark="O",)
     tttR.drawBoard()
 
     arm.move_to_angles([0,np.deg2rad(30),np.deg2rad(-60),0])

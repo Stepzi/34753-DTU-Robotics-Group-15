@@ -41,7 +41,7 @@ class Patterns():
 
         return thread, DONE
 
-    def circle(self,center: list,radius = 0.03, gamma = -np.pi/2,frame_no = 4):
+    def circle(self,center: list,radius = 0.03, gamma = -np.pi/2,frame_no = 4,Ts = 0.1):
         
         _,o_0,gamma_0 = self.arm.fwd_kin(frame_no=frame_no,return_details=True)
             
@@ -68,6 +68,6 @@ class Patterns():
                             tB = 3,
                             order = 3))
 
-        thread, DONE = self.arm.run_in_thread(self.arm.follow_traj,circle,Ts=0.1,frame_no=frame_no,elbow="up")
+        thread, DONE = self.arm.run_in_thread(self.arm.follow_traj,circle,Ts=Ts,frame_no=frame_no,elbow="up")
 
         return thread, DONE                 
