@@ -33,7 +33,7 @@ class RobotArm():
         self.__TORQUE_DISABLE = 0
         self.__DXL_MOVING_STATUS_THRESHOLD = 0.05  # [rad] Threshold for detecting movement completion
         self.__DXL_MIN_SPEED = 0.2 # 0.0117
-        self.__DXL_IDS = [1, 152, 3, 4]  # Motor IDs
+        self.__DXL_IDS = [1, 2, 3, 4]  # Motor IDs
         if end_effector == "angled":
             self.joint_limits = [[self.rot_to_rad(0),self.rot_to_rad(1023)],
             [self.rot_to_rad(93),self.rot_to_rad(927)],
@@ -89,8 +89,8 @@ class RobotArm():
     def assemble_robot(self):
         frames = [] # List of frame Objects, ORDER is important, first {0} in global then all links, then the rest
         # Base Frame
-        frames.append(Frame(T=np.array([[1, 0, 0, 0.0],
-                                        [0, 1, 0, 0.0],
+        frames.append(Frame(T=np.array([[0, -1, 0, 0.045],
+                                        [1, 0, 0, -0.2],
                                         [0, 0, 1, 0.045],
                                         [0, 0, 0, 1]])))
         # Link 1          
@@ -111,7 +111,11 @@ class RobotArm():
             frames.append(Frame(DH_params={'theta': -np.pi/2,      'd':0,      'a': 0.085,  'alpha': 0,         'type': "revolute"}))
             # Tool
             frames.append(Frame(T=np.array([[1, 0, 0, 0.0],
-                                            [0, 1, 0, 0.015],
+                                            [0, 1, 0, 0.035],
+                                            [0, 0, 1, 0.0],
+                                            [0, 0, 0, 1]])))
+            frames.append(Frame(T=np.array([[1, 0, 0, 0],
+                                            [0, 1, 0, 0],
                                             [0, 0, 1, 0.0],
                                             [0, 0, 0, 1]])))
 

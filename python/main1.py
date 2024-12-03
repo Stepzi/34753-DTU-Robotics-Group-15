@@ -11,7 +11,7 @@ def computervision(frame, tttAI):
     rows = 3
     columns = 3
     grid_line_thickness = 15  # Thickness of the grid lines
-    black_pixel_threshold = 7000     # Threshold for number of black pixels
+    black_pixel_threshold = 20000     # Threshold for number of black pixels
 
 
     scale_percent = 50  # Adjust this percentage to scale the captured image
@@ -25,11 +25,12 @@ def computervision(frame, tttAI):
     cell_width = grid_width // columns
     cell_height = grid_height // rows
 
+    median = cv2.medianBlur(frame,5)
     # Convert to grayscale
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    gray = cv2.cvtColor(median, cv2.COLOR_BGR2GRAY)
 
     # Apply binary thresholding
-    _, binary = cv2.threshold(gray, 100, 255, cv2.THRESH_BINARY)
+    _, binary = cv2.threshold(gray, 50, 255, cv2.THRESH_BINARY)
 
     # Create a mask to ignore the grid lines
     grid_mask = np.ones_like(binary, dtype=np.uint8) * 255
@@ -87,22 +88,46 @@ def computervision(frame, tttAI):
                     tttAI.board[row][col] = False  # Opponent's move
                     print(f"Object detected in cell ({row},{col}).")
 
+    # Draw the grid and current game state
+    for row in range(rows):
+        for col in range(columns):
+            x1 = grid_x_start + col * cell_width
+            x2 = x1 + cell_width
+            y1 = grid_y_start + row * cell_height
+            y2 = y1 + cell_height
+
+            # Draw grid on the original frame with thicker lines
+            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), grid_line_thickness)
+
+            # Draw "X" or "O" based on the game board
+            if tttAI.board[row][col] == True:
+                cv2.line(frame, (x1, y1), (x2, y2), (0, 0, 255), 4)
+                cv2.line(frame, (x2, y1), (x1, y2), (0, 0, 255), 4)
+            elif tttAI.board[row][col] == False:
+                cv2.circle(frame, ((x1 + x2) // 2, (y1 + y2) // 2), cell_width // 4, (255, 0, 0), 4)
+
+    # Display the binary and greyscale feeds
+    #cv2.imshow("Binary Image with Annotations", annotated_binary)
+    #cv2.imshow("Greyscale Feed", gray)
+    cv2.imshow("Tic Tac Toe", frame)
+    cv2.waitKey()
+
 
 def main():
-    arm = RobotArm(device_name="COM6",end_effector="angled")
+    arm = RobotArm(device_name="COM7",end_effector="angled")
     frame_no = 5
-    tttR = tttAI(topleft=[0.05,0.075,0],mark="O",)
+    tttR = tttAI(topleft=[0.0,0.0,0],mark="X",cellWidth=0.03)
     tttR.drawBoard()
 
     # Start the webcam feed
     print("Opening Camera...")
-    #videoCapture = cv2.VideoCapture(1)
+    videoCapture = cv2.VideoCapture(1)
 
     # Set HD resolution (1280x720)
     width = 1280  # HD width
     height = 720  # HD height
-   # videoCapture.set(cv2.CAP_PROP_FRAME_WIDTH, width)
-   # videoCapture.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+    videoCapture.set(cv2.CAP_PROP_FRAME_WIDTH, width)
+    videoCapture.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
 
     print(f"Resolution set to: {width}x{height}")
     
@@ -110,21 +135,22 @@ def main():
 
     while tttR.checkGameState() == "Game continues":
         try:
-
-            wait = arm.joint_polyTraj(frame_no=4, 
+            
+            wait = arm.joint_polyTraj(frame_no=5, 
                           A={'gamma': None, 'origin': None, 'elbow':"up", 'v': [0,0,0], 'gamma_d': 0},
-                          B={'gamma': -np.deg2rad(30), 'origin': [0,0.1,0.2], 'elbow':"up", 'v': [0,0,0], 'gamma_d': 0},
+                          B={'gamma': -np.deg2rad(90), 'origin': [0.045,-0.045,0.1], 'elbow':"up", 'v': [0,0,0], 'gamma_d': 0},
                           tA = 0,
                           tB = 3,
                           order = 3)
             
-            thread, DONE = arm.run_in_thread(arm.follow_traj,[wait],Ts=0.1)
+            thread, DONE = arm.run_in_thread(arm.follow_traj,[wait],Ts=0.1,frame_no=5)
             while(not DONE.is_set()):
                 arm.twin.draw_arm(draw_jointSpace=False)
                 time.sleep(0.005)
-
+            
 
             # move to viewing positon
+            time.sleep(5)
            
             # do computer vision
             ret, frame = videoCapture.read()
@@ -136,23 +162,37 @@ def main():
             cv2.imshow("Webcam Feed", frame)
 
             # Wait for the user to press 's' or 'q'
-            print('Press s to capture image')
-            key = cv2.waitKey(1) & 0xFF
-            if key == ord("s"):
-                print("Image captured.")
-                break
-            elif key == ord("q"):
-                print("Game terminated.")
-                videoCapture.release()
-                cv2.destroyAllWindows()
-                exit()
+            print("Hit s to capture image")
+            while True:
+                ret, frame = videoCapture.read()
+                if not ret:
+                    print("Error: Unable to capture frame.")
+                    break
+
+                # Display the live feed
+                cv2.imshow("Webcam Feed", frame)
+
+                # Wait for the user to press 's' or 'q'
+                
+                key = cv2.waitKey(1) & 0xFF
+                if key == ord("s"):
+                    print("Image captured.")
+                    break
+                elif key == ord("q"):
+                    print("Game terminated.")
+                    videoCapture.release()
+                    cv2.destroyAllWindows()
+                    exit()
+                
+               
             print('Performing computer vision')
             computervision(frame, tttR)
 
             #tttR.board[int(float(row))][int(float(col))] = False
             print('The board has been updated with opponent move:')
             tttR.drawBoard()
-
+            if tttR.checkGameState() != "Game continues":
+                break
             # we call "find best move", based on the current board
             print('robot is calculating its move')
             bestMove = tttR.findBestMove()
@@ -163,13 +203,14 @@ def main():
             # translate "the best move" into global coordinates for next point
             nextpoint = tttR.translateMove(bestMove)
             print("The next point for inverse kin is: ", nextpoint)
-
+            nextpoint[2] += 0.025
+            nextpoint[1] += 0.01
             print('Moving the robot arm...')
            
             if tttR.mark == "X":
-                thread, DONE = arm.patterns.cross(center=nextpoint,frame_no=frame_no)
+                thread, DONE = arm.patterns.cross(center=nextpoint,frame_no=frame_no,size=0.02)
             if tttR.mark == "O":
-                thread, DONE = arm.patterns.circle(center=nextpoint,frame_no=frame_no)
+                thread, DONE = arm.patterns.circle(center=nextpoint,frame_no=frame_no,radius=0.01)
             while(not DONE.is_set()):
                 arm.twin.draw_arm(draw_jointSpace=False)
                 time.sleep(0.005)
