@@ -29,7 +29,7 @@ def main():
 
             # we call "find best move", based on the current board
             bestMove = tttR.findBestMove()
-            tttR.board[bestMove[0]][bestMove[1]] = True
+            #tttR.board[bestMove[0]][bestMove[1]] = True
             tttR.drawBoard()
             print("The Optimal Move is :") 
             print("ROW:", bestMove[0], " COL:", bestMove[1]) # (0,0) is top-left cell of grid
