@@ -5,7 +5,8 @@ from tictactoeAI import tttAI
 
 def main():
     arm = RobotArm(device_name="/dev/ttyACM0",end_effector="straight")
-    tttR = tttAI(mark="X")
+    tttR = tttAI(topleft=[0.025,0.075,0],mark="X",)
+    tttR.drawBoard()
 
     while tttR.checkGameState() == "Game continues":
         try:
@@ -41,23 +42,6 @@ def main():
             while(not DONE.is_set()):
                 arm.twin.draw_arm(draw_jointSpace=False)
                 time.sleep(0.005)
-            
-                
-            # input()
-
-            # # after "nextpoint" has been calculated, we send it to the inverse kinematic function...
-
-            # # we use the suggested move:
-            # print("**Simulated update of the board**")
-            # tttR.board = [ 
-            #     [ True, False, True ], 
-            #     [ False, False, True ], 
-            #     [ None, None, True ] 
-            # ]
-            # tttR.drawBoard() 
-            # # and check the state:
-            # print(tttR.checkGameState())
-                
 
         
         except KeyboardInterrupt:
