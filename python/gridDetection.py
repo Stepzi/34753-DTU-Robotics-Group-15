@@ -281,6 +281,29 @@ def determine_inputs(pixel_diffs, robot_move, threshold):
     else:
         print("There was an unexpected number of changes. Something went wrong.")
 
+def int_to_grid(input):
+	cell = (0,0)
+	if input == 1:
+		cell = (0,0)
+	if input == 2:
+		cell = (0,1)
+	if input == 4:
+		cell = (1,0)
+	if input == 3:
+		cell = (0,2)
+	if input == 5:
+		cell = (1,1)
+	if input == 6:
+		cell = (1,2)
+	if input == 7:
+		cell = (2,0)
+	if input == 8:
+		cell = (2,1)
+	if input == 9:
+		cell = (2,2)
+
+	return cell
+
 def move_detection():
     debug =          False 
     showGridPoints = False
@@ -365,7 +388,8 @@ def move_detection():
 
     cv2.destroyAllWindows()
     """
-    return diff
+
+    return int_to_grid(diff)
 
 cell = move_detection()
 print(cell)
