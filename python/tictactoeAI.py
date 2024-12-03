@@ -180,6 +180,11 @@ class tttAI():
 			print("Robot has a winning move!")
 		elif bestVal == -10:
 			print("Opponent has a winning move!")
+
+		# update board with optimal move
+		self.board[bestMove[0]][bestMove[1]] = True
+
+		# return best move
 		return bestMove 
 	
 	def translateMove(self, move):
