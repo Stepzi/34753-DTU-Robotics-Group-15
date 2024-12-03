@@ -89,8 +89,8 @@ class RobotArm():
     def assemble_robot(self):
         frames = [] # List of frame Objects, ORDER is important, first {0} in global then all links, then the rest
         # Base Frame
-        frames.append(Frame(T=np.array([[1, 0, 0, 0],
-                                        [0, 1, 0, 0],
+        frames.append(Frame(T=np.array([[1, 0, 0, 0.0],
+                                        [0, 1, 0, 0.0],
                                         [0, 0, 1, 0.045],
                                         [0, 0, 0, 1]])))
         # Link 1          
