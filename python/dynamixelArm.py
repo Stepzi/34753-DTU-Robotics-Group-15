@@ -33,7 +33,7 @@ class RobotArm():
         self.__TORQUE_DISABLE = 0
         self.__DXL_MOVING_STATUS_THRESHOLD = 0.05  # [rad] Threshold for detecting movement completion
         self.__DXL_MIN_SPEED = 0.2 # 0.0117
-        self.__DXL_IDS = [1, 152, 3, 4]  # Motor IDs
+        self.__DXL_IDS = [1, 2, 3, 4]  # Motor IDs
         if end_effector == "angled":
             self.joint_limits = [[self.rot_to_rad(0),self.rot_to_rad(1023)],
             [self.rot_to_rad(93),self.rot_to_rad(927)],
@@ -328,7 +328,7 @@ class RobotArm():
         return Trajectory(0,T,coeffs=coeffs,space="task")
 
     def task_genericTraj(self,funcs: list,A: dict,B: dict,T,order):
-        """Creates a circular trajectory in the task space between configurations `A` and `B`       
+        """Creates a generic trajectory in the task space between configurations `A` and `B`       
         
         TODO
 
@@ -349,7 +349,7 @@ class RobotArm():
         
         s = Trajectory(0,T,coeffs=[s],space="traj")
 
-        
+        # s.plot()
         functions = []
         for func in funcs:
             if func['type'] == "const":
@@ -377,32 +377,6 @@ class RobotArm():
         
         
         return Trajectory(0,T,funcs=functions,space="task")
-
-        
-        
-        # cA = A['origin'].copy()
-        # cA.append(A['gamma'])
-        # cA = np.array(cA).reshape(4,1)
-
-        # cB = B['origin'].copy()
-        # cB.append(B['gamma'])
-        # cB = np.array(cB).reshape(4,1)
-
-        # dc = cB-cA
-
-        #  # Calculate Polynomial for each joint
-        # coeffs = []
-        # if order == 1:
-        #     for i in range(4):
-        #         coeffs.append(np.array([cA[i]+s[0]*dc[i],s[1]*dc[i]]).reshape(order+1,1))
-        # elif order == 3:
-        #     for i in range(4):
-        #         coeffs.append(np.array([cA[i]+s[0]*dc[i],s[1]*dc[i],s[2]*dc[i],s[3]*dc[i]]).reshape(order+1,1))
-        # elif order == 5:
-        #     for i in range(4):
-        #         coeffs.append(np.array([cA[i]+s[0]*dc[i],s[1]*dc[i],s[2]*dc[i],s[3]*dc[i],s[4]*dc[i],s[5]*dc[i]]).reshape(order+1,1))
-        # # Return Trajectory object in joint space
-        # return Trajectory(coeffs,0,T,space="task")
 
     def joint_polyTraj(self,frame_no,A: dict,B: dict,tA,tB,order):
         """Creates a trajectory for the frame `frame_no` in the joint space between configurations `A` and `B`       
@@ -436,9 +410,6 @@ class RobotArm():
         qB = self.inv_kin(B['gamma'],B['origin'],elbow=B['elbow'],tool=tool)
 
         if order >= 3:
-            # Assume velocity in {g} and gamma_d is given. 
-            # Compute remaining:
-
             # normally: [x_d, y_d, z_d, w_x, w_y, w_z]' = J * q_d
             # to find inverse use pinv. But we dont know w_x, w_y, w_z but instead gamma_d
             # r_31 = sin(gamma) -> r_31_d = cos(gamma)*gamma_d
@@ -976,15 +947,28 @@ class Trajectory():
         fig, axs = plt.subplots(self.dim, 1)
         t_values = np.linspace(self.tA, self.tB, 100)  # Generate 100 points between tA and tB
 
+        if self.type == "generic":
+                labels = ["x","y","z","γ"]
+                y_values = [self.eval(t) for t in t_values]
+
         for i in range(self.dim):
             # Evaluate the polynomial for the current dimension
-            y_values = [sum(c * (t ** j) for j, c in enumerate(self.coeffs[i])) for t in t_values]
-            axs[i].plot(t_values, y_values, label=f'q')
-            axs[i].set_title(f'q_{i+1}')
-            axs[i].set_xlabel('Time (t)')
-            axs[i].set_ylabel('Value')
-            axs[i].grid()
-            # axs[i].legend()
+            if self.dim > 1:
+                a = axs[i]
+            else:
+                a = axs
+            if self.type == "poly":
+                y_values = [sum(c * (t ** j) for j, c in enumerate(self.coeffs[i])) for t in t_values]
+                a.plot(t_values, y_values, label=f'q')
+                a.set_ylabel(f'q_{i+1}')
+                # a.set_ylabel(f's')
+
+            if self.type == "generic":
+                y = [j[i] for j in y_values]                
+                a.plot(t_values, y, label=f'q')
+                a.set_ylabel(f'{labels[i]}')
+            a.set_xlabel('Time (t)')
+            a.grid()
 
         plt.tight_layout()
         plt.show()

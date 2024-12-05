@@ -67,7 +67,7 @@ class Patterns():
                             tA = 0,
                             tB = 3,
                             order = 3))
-
+        # circle[-2].plot()
         thread, DONE = self.arm.run_in_thread(self.arm.follow_traj,circle,Ts=Ts,frame_no=frame_no,elbow="up")
 
         return thread, DONE                 
