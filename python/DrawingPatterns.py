@@ -1,7 +1,7 @@
 import time
 import numpy as np
-from dynamixelArm import RobotArm 
-from tictactoeAI import tttAI
+from inc.dynamixelArm import RobotArm 
+from inc.tictactoeAI import tttAI
 
 def main():
     arm = RobotArm(device_name="/dev/ttyACM0",end_effector="angled")

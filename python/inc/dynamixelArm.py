@@ -1,6 +1,6 @@
 import numpy as np
-from digitalTwin import DigitalTwin 
-from patterns import Patterns 
+from inc.digitalTwin import DigitalTwin 
+from inc.patterns import Patterns 
 import threading
 import time
 import matplotlib.pyplot as plt
