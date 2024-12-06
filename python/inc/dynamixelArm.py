@@ -4,12 +4,6 @@ from inc.patterns import Patterns
 import threading
 import time
 import matplotlib.pyplot as plt
-
-
-
-# Add the Dynamixel SDK path to sys.path
-# sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), 'DynamixelSDK/python/src')))
-
 import dynamixel_sdk as dxl
 
 class RobotArm():
@@ -89,8 +83,8 @@ class RobotArm():
     def assemble_robot(self):
         frames = [] # List of frame Objects, ORDER is important, first {0} in global then all links, then the rest
         # Base Frame
-        frames.append(Frame(T=np.array([[1, 0, 0, 0.0],
-                                        [0, 1, 0, 0.0],
+        frames.append(Frame(T=np.array([[0, -1, 0, 0.045],
+                                        [1, 0, 0, -0.2],
                                         [0, 0, 1, 0.045],
                                         [0, 0, 0, 1]])))
         # Link 1          
@@ -111,7 +105,11 @@ class RobotArm():
             frames.append(Frame(DH_params={'theta': -np.pi/2,      'd':0,      'a': 0.085,  'alpha': 0,         'type': "revolute"}))
             # Tool
             frames.append(Frame(T=np.array([[1, 0, 0, 0.0],
-                                            [0, 1, 0, 0.015],
+                                            [0, 1, 0, 0.035],
+                                            [0, 0, 1, 0.0],
+                                            [0, 0, 0, 1]])))
+            frames.append(Frame(T=np.array([[1, 0, 0, 0],
+                                            [0, 1, 0, 0],
                                             [0, 0, 1, 0.0],
                                             [0, 0, 0, 1]])))
 
@@ -135,7 +133,8 @@ class RobotArm():
         
         
         if return_details:
-            gamma = np.arccos(T_global[frame_no][0,0]/np.cos(joint_angles[0]))*np.sign(T_global[frame_no][2,0])
+            T_i0 = np.linalg.inv(T_global[0]) @ T_global[frame_no]
+            gamma = np.arccos(T_i0[0,0]/np.cos(joint_angles[0]))*np.sign(T_i0[2,0])
             gamma = gamma.item()
             origin = [T_global[frame_no][0,3].item(),T_global[frame_no][1,3].item(),T_global[frame_no][2,3].item()]
             return T_global, origin, gamma
@@ -328,7 +327,7 @@ class RobotArm():
         return Trajectory(0,T,coeffs=coeffs,space="task")
 
     def task_genericTraj(self,funcs: list,A: dict,B: dict,T,order):
-        """Creates a generic trajectory in the task space between configurations `A` and `B`       
+        """Creates a circular trajectory in the task space between configurations `A` and `B`       
         
         TODO
 
@@ -349,7 +348,7 @@ class RobotArm():
         
         s = Trajectory(0,T,coeffs=[s],space="traj")
 
-        # s.plot()
+        
         functions = []
         for func in funcs:
             if func['type'] == "const":
@@ -378,6 +377,7 @@ class RobotArm():
         
         return Trajectory(0,T,funcs=functions,space="task")
 
+      
     def joint_polyTraj(self,frame_no,A: dict,B: dict,tA,tB,order):
         """Creates a trajectory for the frame `frame_no` in the joint space between configurations `A` and `B`       
         
@@ -405,11 +405,14 @@ class RobotArm():
             A['gamma'] = gamma_0
         if A['origin'] is None:        
             A['origin'] = o_0
-            
+
         qA = self.inv_kin(A['gamma'],A['origin'],elbow=A['elbow'],tool=tool)
         qB = self.inv_kin(B['gamma'],B['origin'],elbow=B['elbow'],tool=tool)
 
         if order >= 3:
+            # Assume velocity in {g} and gamma_d is given. 
+            # Compute remaining:
+
             # normally: [x_d, y_d, z_d, w_x, w_y, w_z]' = J * q_d
             # to find inverse use pinv. But we dont know w_x, w_y, w_z but instead gamma_d
             # r_31 = sin(gamma) -> r_31_d = cos(gamma)*gamma_d
@@ -947,28 +950,15 @@ class Trajectory():
         fig, axs = plt.subplots(self.dim, 1)
         t_values = np.linspace(self.tA, self.tB, 100)  # Generate 100 points between tA and tB
 
-        if self.type == "generic":
-                labels = ["x","y","z","γ"]
-                y_values = [self.eval(t) for t in t_values]
-
         for i in range(self.dim):
             # Evaluate the polynomial for the current dimension
-            if self.dim > 1:
-                a = axs[i]
-            else:
-                a = axs
-            if self.type == "poly":
-                y_values = [sum(c * (t ** j) for j, c in enumerate(self.coeffs[i])) for t in t_values]
-                a.plot(t_values, y_values, label=f'q')
-                a.set_ylabel(f'q_{i+1}')
-                # a.set_ylabel(f's')
-
-            if self.type == "generic":
-                y = [j[i] for j in y_values]                
-                a.plot(t_values, y, label=f'q')
-                a.set_ylabel(f'{labels[i]}')
-            a.set_xlabel('Time (t)')
-            a.grid()
+            y_values = [sum(c * (t ** j) for j, c in enumerate(self.coeffs[i])) for t in t_values]
+            axs[i].plot(t_values, y_values, label=f'q')
+            axs[i].set_title(f'q_{i+1}')
+            axs[i].set_xlabel('Time (t)')
+            axs[i].set_ylabel('Value')
+            axs[i].grid()
+            # axs[i].legend()
 
         plt.tight_layout()
         plt.show()
